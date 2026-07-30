@@ -1,0 +1,38 @@
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/dochelper?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${DB_USERNAME:dochelper}
+    password: ${DB_PASSWORD:dochelper-local}
+    hikari:
+      pool-name: DocHelperHikariPool
+      minimum-idle: 2
+      maximum-pool-size: 10
+      connection-timeout: 3000
+      validation-timeout: 1000
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2s
+      connect-timeout: 2s
+      client-name: dochelper
+  ai:
+    vectorstore:
+      qdrant:
+        host: ${QDRANT_HOST:localhost}
+        port: ${QDRANT_GRPC_PORT:6334}
+        use-tls: false
+        collection-name: dochelper_knowledge
+        initialize-schema: true
+
+dochelper:
+  storage:
+    enabled: true
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    access-key: ${MINIO_ACCESS_KEY:dochelper}
+    secret-key: ${MINIO_SECRET_KEY:dochelper-local-secret}
+    bucket: ${MINIO_BUCKET:dochelper-files}
+  infrastructure:
+    qdrant-health-enabled: true
+    qdrant-http-url: ${QDRANT_HTTP_URL:http://localhost:6333}
+    qdrant-collection: dochelper_knowledge

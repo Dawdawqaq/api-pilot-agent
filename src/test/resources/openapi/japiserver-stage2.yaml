@@ -1,0 +1,103 @@
+openapi: 3.0.3
+info:
+  title: JApiServer 阶段 2 导入样例
+  version: 1.0.0
+  description: 根据 JApiServer 现有 Controller 路径整理的测试夹具，不代表该项目已启用 springdoc。
+servers:
+  - url: http://localhost:8080
+paths:
+  /auth/login:
+    post:
+      operationId: login
+      summary: 用户登录
+      tags: [认证]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: 凭证错误
+  /api/v1/domains:
+    get:
+      operationId: listDomains
+      summary: 查询域名
+      tags: [域名]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 查询成功
+    post:
+      operationId: createDomain
+      summary: 新增域名
+      tags: [域名]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDomainRequest'
+      responses:
+        '200':
+          description: 创建成功
+  /api/v1/domains/{domainId}:
+    delete:
+      operationId: deleteDomain
+      summary: 删除域名
+      tags: [域名]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: domainId
+          in: path
+          required: true
+          description: 域名标识
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 删除成功
+        '404':
+          description: 域名不存在
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          minLength: 12
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        userId:
+          type: integer
+          format: int64
+    CreateDomainRequest:
+      type: object
+      required: [domain]
+      properties:
+        domain:
+          type: string

@@ -1,0 +1,6 @@
+dochelper:
+  ai:
+    base-url: ${AI_BASE_URL:https://api.deepseek.com}
+    api-key: ${AI_API_KEY:}
+    chat-model: ${AI_CHAT_MODEL:deepseek-v4-flash}
+    embedding-model: deterministic-local

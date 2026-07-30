@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="ApiPilot API 测试诊断 Agent 控制台">
+    <title>ApiPilot · Agent Console</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div class="app-shell">
+    <aside class="sidebar">
+        <div class="brand">
+            <div class="brand-mark">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M5 5.5h14v9H8l-3 3v-12Z"></path>
+                    <path d="M9 9h6M9 12h4"></path>
+                </svg>
+            </div>
+            <div>
+                <strong>ApiPilot</strong>
+                <span>Agent Console</span>
+            </div>
+        </div>
+
+        <nav class="nav-list" aria-label="主导航">
+            <button class="nav-item active" data-view-target="overview">
+                <span class="nav-icon">⌂</span>
+                运行概览
+            </button>
+            <button class="nav-item" data-view-target="workspace">
+                <span class="nav-icon">◇</span>
+                项目与知识
+            </button>
+            <button class="nav-item" data-view-target="agent">
+                <span class="nav-icon">✦</span>
+                Agent 实验台
+            </button>
+            <button class="nav-item" data-view-target="reports">
+                <span class="nav-icon">▤</span>
+                测试报告
+            </button>
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="system-state">
+                <span class="pulse"></span>
+                <div>
+                    <strong id="system-status">正在检查</strong>
+                    <span>公共开发设施</span>
+                </div>
+            </div>
+            <span class="version">Stage 7 · Schema V7</span>
+        </div>
+    </aside>
+
+    <main class="main-area">
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">API TESTING INTELLIGENCE</p>
+                <h1 id="page-title">运行概览</h1>
+            </div>
+            <div class="topbar-actions">
+                <label class="project-picker">
+                    <span>当前项目</span>
+                    <select id="project-select" aria-label="选择当前项目">
+                        <option value="">请选择项目</option>
+                    </select>
+                </label>
+                <button class="icon-button" id="refresh-button" title="刷新当前数据">↻</button>
+            </div>
+        </header>
+
+        <div id="toast-region" class="toast-region" aria-live="polite"></div>
+
+        <section class="view active" data-view="overview">
+            <div class="hero-card">
+                <div>
+                    <span class="status-chip"><i></i> Agent Backend Online</span>
+                    <h2>从接口知识到<br><em>可验证的执行证据</em></h2>
+                    <p>让 Agent 检索 OpenAPI 与业务文档，在确定性安全边界内规划、调用、观察并生成报告。</p>
+                    <button class="primary-button" data-jump="agent">
+                        启动测试任务
+                        <span>→</span>
+                    </button>
+                </div>
+                <div class="flow-visual" aria-label="Agent 工作流">
+                    <div class="orbit orbit-one"></div>
+                    <div class="orbit orbit-two"></div>
+                    <div class="core-node">AP</div>
+                    <span class="flow-node node-rag">RAG</span>
+                    <span class="flow-node node-plan">PLAN</span>
+                    <span class="flow-node node-tool">TOOLS</span>
+                    <span class="flow-node node-report">REPORT</span>
+                </div>
+            </div>
+
+            <div class="metric-grid">
+                <article class="metric-card">
+                    <span class="metric-label">项目</span>
+                    <strong id="metric-projects">0</strong>
+                    <small>已登记的被测服务</small>
+                </article>
+                <article class="metric-card">
+                    <span class="metric-label">Agent 任务</span>
+                    <strong id="metric-tasks">0</strong>
+                    <small>当前项目历史任务</small>
+                </article>
+                <article class="metric-card">
+                    <span class="metric-label">成功率</span>
+                    <strong id="metric-success">—</strong>
+                    <small>基于持久化报告</small>
+                </article>
+                <article class="metric-card accent-card">
+                    <span class="metric-label">安全边界</span>
+                    <strong>6</strong>
+                    <small>强类型受控工具</small>
+                </article>
+            </div>
+
+            <div class="two-column">
+                <article class="panel">
+                    <div class="panel-heading">
+                        <div>
+                            <span class="section-index">01</span>
+                            <h3>最近任务</h3>
+                        </div>
+                        <button class="text-button" data-jump="agent">查看全部</button>
+                    </div>
+                    <div id="overview-task-list" class="compact-list empty-state">
+                        选择项目后显示任务
+                    </div>
+                </article>
+                <article class="panel">
+                    <div class="panel-heading">
+                        <div>
+                            <span class="section-index">02</span>
+                            <h3>执行链路</h3>
+                        </div>
+                    </div>
+                    <ol class="pipeline-list">
+                        <li><b>01</b><span>知识检索</span><small>MySQL + Qdrant RRF</small></li>
+                        <li><b>02</b><span>结构化规划</span><small>DeepSeek / Stub</small></li>
+                        <li><b>03</b><span>受控执行</span><small>SSRF · Method Policy</small></li>
+                        <li><b>04</b><span>证据报告</span><small>Redacted Audit</small></li>
+                    </ol>
+                </article>
+            </div>
+        </section>
+
+        <section class="view" data-view="workspace">
+            <div class="section-intro">
+                <div>
+                    <p class="eyebrow">WORKSPACE</p>
+                    <h2>项目与知识资产</h2>
+                    <p>先登记被测服务和安全边界，再导入 OpenAPI 与补充业务文档。</p>
+                </div>
+                <span class="stage-badge">Prepare</span>
+            </div>
+
+            <div class="workspace-grid">
+                <article class="panel form-panel">
+                    <div class="panel-heading">
+                        <div>
+                            <span class="section-index">01</span>
+                            <h3>新建项目</h3>
+                        </div>
+                    </div>
+                    <form id="project-form" class="form-stack">
+                        <label>
+                            <span>项目编码</span>
+                            <input name="code" required pattern="[a-z][a-z0-9-]*"
+                                   placeholder="japi-server">
+                        </label>
+                        <label>
+                            <span>项目名称</span>
+                            <input name="name" required maxlength="128"
+                                   placeholder="JApiServer 演示项目">
+                        </label>
+                        <label>
+                            <span>项目说明</span>
+                            <textarea name="description" rows="3"
+                                      placeholder="用于 Agent API 测试演示"></textarea>
+                        </label>
+                        <button class="primary-button wide" type="submit">创建并选择项目</button>
+                    </form>
+                </article>
+
+                <article class="panel form-panel">
+                    <div class="panel-heading">
+                        <div>
+                            <span class="section-index">02</span>
+                            <h3>执行环境</h3>
+                        </div>
+                        <span id="environment-count" class="count-pill">0 个</span>
+                    </div>
+                    <form id="environment-form" class="form-stack">
+                        <div class="field-row">
+                            <label>
+                                <span>环境名称</span>
+                                <input name="name" required placeholder="local">
+                            </label>
+                            <label>
+                                <span>Base URL</span>
+                                <input name="baseUrl" required type="url"
+                                       placeholder="http://localhost:8080">
+                            </label>
+                        </div>
+                        <label>
+                            <span>允许方法</span>
+                            <input name="allowedMethods" value="GET,POST"
+                                   placeholder="GET,POST">
+                        </label>
+                        <div class="check-row">
+                            <label><input name="allowPrivateNetwork" type="checkbox">
+                                允许访问本机/私网目标</label>
+                            <label><input name="defaultEnvironment" type="checkbox" checked>
+                                设为默认环境</label>
+                        </div>
+                        <button class="secondary-button wide" type="submit">保存执行环境</button>
+                    </form>
+                    <div id="environment-list" class="tag-list"></div>
+                </article>
+
+                <article class="panel upload-panel">
+                    <div class="panel-heading">
+                        <div>
+                            <span class="section-index">03</span>
+                            <h3>OpenAPI 目录</h3>
+                        </div>
+                    </div>
+                    <form id="openapi-form" class="upload-box">
+                        <input id="openapi-file" name="file" type="file"
+                               accept=".json,.yaml,.yml" required>
+                        <label for="openapi-file">
+                            <span class="upload-icon">⇧</span>
+                            <strong>导入 OpenAPI</strong>
+                            <small>JSON / YAML · 最大 5 MB</small>
+                        </label>
+                        <button class="secondary-button" type="submit">开始解析</button>
+                    </form>
+                    <p id="openapi-state" class="muted-line">尚未载入当前接口目录</p>
+                </article>
+
+                <article class="panel upload-panel">
+                    <div class="panel-heading">
+                        <div>
+                            <span class="section-index">04</span>
+                            <h3>业务知识库</h3>
+                        </div>
+                    </div>
+                    <form id="document-form" class="upload-box">
+                        <input id="document-file" name="file" type="file"
+                               accept=".md,.txt,.pdf" required>
+                        <label for="document-file">
+                            <span class="upload-icon">＋</span>
+                            <strong>添加补充文档</strong>
+                            <small>Markdown / TXT / PDF · 最大 10 MB</small>
+                        </label>
+                        <button class="secondary-button" type="submit">解析并索引</button>
+                    </form>
+                    <div id="document-list" class="compact-list empty-state">暂无文档</div>
+                </article>
+            </div>
+        </section>
+
+        <section class="view" data-view="agent">
+            <div class="section-intro">
+                <div>
+                    <p class="eyebrow">AGENT LAB</p>
+                    <h2>自然语言测试任务</h2>
+                    <p>实时观察检索、规划、工具执行、确认与报告生成轨迹。</p>
+                </div>
+                <span class="stage-badge live-badge"><i></i> Live</span>
+            </div>
+
+            <div class="agent-layout">
+                <article class="panel composer-panel">
+                    <form id="task-form" class="form-stack">
+                        <label>
+                            <span>执行环境</span>
+                            <select id="task-environment" name="environmentId" required>
+                                <option value="">请先配置环境</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span>测试目标</span>
+                            <textarea id="task-goal" name="goal" rows="5" required
+                                      maxlength="2000"
+                                      placeholder="例如：登录系统后查询当前用户，并验证账号状态为启用"></textarea>
+                        </label>
+                        <details class="advanced-box">
+                            <summary>Stub 强类型计划 <span>可选</span></summary>
+                            <p>无 API Key 时可提供 ExecutionStepRequest JSON 数组，稳定复现多接口链路。</p>
+                            <textarea id="plan-hint" name="planHint" rows="10"
+                                      spellcheck="false"
+                                      placeholder='[{"name":"健康检查","method":"GET","path":"/health","assertions":[{"type":"STATUS_CODE","expectedValue":200}]}]'></textarea>
+                        </details>
+                        <button class="primary-button wide launch-button" type="submit">
+                            <span>✦</span> 启动 Agent
+                        </button>
+                    </form>
+                </article>
+
+                <article class="panel task-history-panel">
+                    <div class="panel-heading">
+                        <div>
+                            <span class="section-index">History</span>
+                            <h3>任务历史</h3>
+                        </div>
+                        <button id="reload-tasks" class="text-button">刷新</button>
+                    </div>
+                    <div id="task-list" class="task-list empty-state">当前项目暂无任务</div>
+                </article>
+
+                <article class="panel trace-panel">
+                    <div class="trace-header">
+                        <div>
+                            <span id="trace-status" class="status-badge neutral">IDLE</span>
+                            <h3 id="trace-title">选择一个任务查看执行轨迹</h3>
+                            <small id="trace-meta">SSE 尚未连接</small>
+                        </div>
+                        <button id="cancel-task" class="danger-button hidden">取消任务</button>
+                    </div>
+                    <div id="confirmation-box" class="confirmation-box hidden">
+                        <div>
+                            <span>!</span>
+                            <div>
+                                <strong>需要人工确认危险操作</strong>
+                                <p id="confirmation-copy">Agent 计划执行 DELETE 请求。</p>
+                            </div>
+                        </div>
+                        <div class="confirmation-actions">
+                            <button id="reject-confirmation" class="ghost-button">拒绝</button>
+                            <button id="approve-confirmation" class="danger-solid-button">确认执行</button>
+                        </div>
+                    </div>
+                    <div id="trace-list" class="timeline empty-state">
+                        启动或选择任务后，这里将显示持久化事件流
+                    </div>
+                    <div id="tool-drawer" class="tool-drawer"></div>
+                </article>
+            </div>
+        </section>
+
+        <section class="view" data-view="reports">
+            <div class="section-intro">
+                <div>
+                    <p class="eyebrow">EVIDENCE</p>
+                    <h2>测试报告</h2>
+                    <p>每份报告关联检索证据、工具审计与脱敏后的原始请求响应。</p>
+                </div>
+                <button id="reload-reports" class="secondary-button">刷新报告</button>
+            </div>
+
+            <div class="report-layout">
+                <article class="panel report-list-panel">
+                    <div id="report-list" class="report-list empty-state">当前项目暂无报告</div>
+                </article>
+                <article class="panel report-detail-panel">
+                    <div id="report-detail" class="report-placeholder">
+                        <div class="report-placeholder-mark">▤</div>
+                        <h3>选择一份报告</h3>
+                        <p>查看指标、RAG 证据和每一步脱敏请求响应。</p>
+                    </div>
+                </article>
+            </div>
+        </section>
+    </main>
+</div>
+<script src="/js/app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,150 @@
+openapi: 3.0.3
+info:
+  title: JApiServer Agent 联调接口
+  version: 1.0.0
+  description: 阶段 7 根据 JApiServer Controller 整理的只读测试接口契约。
+servers:
+  - url: http://localhost:8080
+paths:
+  /health/ready:
+    get:
+      operationId: readiness
+      summary: 检查应用、MySQL 与 Redis 是否就绪
+      tags: [健康检查]
+      responses:
+        '200':
+          description: 服务就绪
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResult'
+        '503':
+          description: 核心依赖不可用
+  /auth/login:
+    post:
+      operationId: login
+      summary: 租户管理员登录并签发访问令牌
+      tags: [认证]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResult'
+        '401':
+          description: 账号或密码错误
+        '403':
+          description: 账号被禁用或锁定
+  /api/v1/user/profile:
+    get:
+      operationId: getProfile
+      summary: 查询当前租户管理员资料
+      tags: [租户账号]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResult'
+        '401':
+          description: 访问令牌无效
+  /api/v1/dashboard/stats:
+    get:
+      operationId: getDashboardStats
+      summary: 查询租户控制台统计
+      tags: [租户控制台]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: range
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [7d, 30d]
+            default: 7d
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResult'
+        '401':
+          description: 访问令牌无效
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          maxLength: 100
+        password:
+          type: string
+          minLength: 12
+          maxLength: 128
+    ApiResult:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+    AuthResult:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            token:
+              type: string
+            user:
+              type: object
+              properties:
+                id:
+                  type: integer
+                  format: int64
+                username:
+                  type: string
+                role:
+                  type: string
+    ProfileResult:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            id:
+              type: integer
+              format: int64
+            username:
+              type: string
+            role:
+              type: string

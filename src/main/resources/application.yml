@@ -1,0 +1,86 @@
+spring:
+  application:
+    name: dochelper
+  profiles:
+    default: local,stub
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  flyway:
+    clean-disabled: true
+    validate-on-migrate: true
+  jackson:
+    time-zone: Asia/Shanghai
+  codec:
+    max-in-memory-size: 11MB
+
+server:
+  shutdown: graceful
+
+dochelper:
+  ai:
+    base-url: ${AI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode}
+    api-key: ${AI_API_KEY:}
+    chat-model: ${AI_CHAT_MODEL:qwen-plus}
+    embedding-model: ${AI_EMBEDDING_MODEL:text-embedding-v4}
+  redis:
+    namespace: "dochelper:"
+  storage:
+    enabled: false
+    endpoint: http://localhost:9000
+    access-key: dochelper
+    secret-key: dochelper-local-secret
+    bucket: dochelper-files
+    verify-on-startup: true
+  infrastructure:
+    qdrant-health-enabled: false
+    qdrant-http-url: http://localhost:6333
+    qdrant-collection: dochelper_knowledge
+  openapi:
+    max-file-size-bytes: 5242880
+  knowledge:
+    max-file-size-bytes: 10485760
+    max-extracted-characters: 500000
+    chunk-size: 800
+    chunk-overlap: 120
+    retrieval-candidate-size: 20
+    rrf-rank-constant: 60
+  executor:
+    connect-timeout: 3s
+    response-timeout: 10s
+    max-response-size-bytes: 1048576
+    max-request-size-bytes: 524288
+    max-steps: 10
+    sensitive-name-pattern: "(?i).*(authorization|token|password|secret|cookie|api[-_]?key).*"
+  agent:
+    max-steps: 10
+    max-tool-calls: 30
+    max-replans: 2
+    max-tool-retries: 2
+    task-timeout: 2m
+    confirmation-timeout: 10m
+    event-poll-interval: 500ms
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
+    db-config:
+      id-type: assign_id
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+management:
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  health:
+    defaults:
+      enabled: true

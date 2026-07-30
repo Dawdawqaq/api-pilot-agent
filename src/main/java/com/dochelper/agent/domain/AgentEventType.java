@@ -1,0 +1,22 @@
+package com.dochelper.agent.domain;
+
+/**
+ * Agent 可观测事件类型。
+ */
+public enum AgentEventType {
+    TASK_CREATED,
+    STATE_CHANGED,
+    RETRIEVAL_COMPLETED,
+    PLAN_CREATED,
+    TOOL_STARTED,
+    TOOL_RETRIED,
+    TOOL_COMPLETED,
+    TOOL_FAILED,
+    CONFIRMATION_REQUIRED,
+    CONFIRMATION_DECIDED,
+    REPLAN_STARTED,
+    CANCEL_REQUESTED,
+    TASK_CANCELLED,
+    REPORT_GENERATED,
+    TASK_COMPLETED
+}

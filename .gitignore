@@ -1,0 +1,14 @@
+target/
+.idea/
+*.iml
+.env
+logs/
+.playwright-cli/
+.local-notes/
+*.log
+Thumbs.db
+.DS_Store
+.playwright-cli/
+*.log
+Thumbs.db
+.DS_Store
