@@ -3,6 +3,7 @@ target/
 *.iml
 .env
 logs/
+output/
 .playwright-cli/
 .local-notes/
 .agents/
@@ -11,4 +12,5 @@ Thumbs.db
 .DS_Store
 _Run_*.*
 _run_*.*
+
 
