@@ -25,8 +25,15 @@ public class SensitiveDataSanitizer {
             "(?i)(Bearer\\s+)[^\\s,;]+"
     );
     private static final Pattern SECRET_ASSIGNMENT = Pattern.compile(
-            "(?i)((?:token|password|secret|api[-_]?key)\\s*[:=]\\s*)[^\\s,;]+"
+            "(?i)((?:token|password|secret|credential|session|api[-_]?key)\\s*[:=]\\s*)[^\\s,;]+"
     );
+    private static final Pattern JWT_VALUE = Pattern.compile(
+            "(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{8,}"
+    );
+    private static final Pattern EMAIL_VALUE = Pattern.compile(
+            "(?i)(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}(?![A-Za-z0-9.-])"
+    );
+    private static final Pattern PHONE_VALUE = Pattern.compile("(?<!\\d)1[3-9]\\d{9}(?!\\d)");
 
     private final Pattern sensitiveNamePattern;
 
@@ -83,6 +90,9 @@ public class SensitiveDataSanitizer {
             }
             return target;
         }
+        if (source.isTextual()) {
+            return TextNode.valueOf(sanitizeText(source.asText()));
+        }
         return source.deepCopy();
     }
 
@@ -101,7 +111,10 @@ public class SensitiveDataSanitizer {
             return value;
         }
         String sanitized = BEARER_VALUE.matcher(value).replaceAll("$1" + MASK);
-        return SECRET_ASSIGNMENT.matcher(sanitized).replaceAll("$1" + MASK);
+        sanitized = SECRET_ASSIGNMENT.matcher(sanitized).replaceAll("$1" + MASK);
+        sanitized = JWT_VALUE.matcher(sanitized).replaceAll(MASK);
+        sanitized = EMAIL_VALUE.matcher(sanitized).replaceAll(MASK);
+        return PHONE_VALUE.matcher(sanitized).replaceAll(MASK);
     }
 
     /**

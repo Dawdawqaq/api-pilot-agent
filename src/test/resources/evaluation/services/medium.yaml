@@ -1,0 +1,34 @@
+openapi: 3.0.3
+info: {title: Medium Account API, version: 1.0.0}
+paths:
+  /auth/login:
+    post:
+      operationId: login
+      responses: {'200': {description: ok}, '401': {description: denied}}
+  /users:
+    get:
+      operationId: listUsers
+      responses: {'200': {description: ok}}
+    post:
+      operationId: createUser
+      responses: {'201': {description: created}, '400': {description: invalid}}
+  /users/{id}:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: integer}}
+    get:
+      operationId: getUser
+      responses: {'200': {description: ok}, '404': {description: missing}}
+    patch:
+      operationId: updateUser
+      responses: {'200': {description: ok}, '400': {description: invalid}}
+    delete:
+      operationId: deleteUser
+      responses: {'204': {description: deleted}, '404': {description: missing}}
+  /roles:
+    get:
+      operationId: listRoles
+      responses: {'200': {description: ok}}
+  /audit/events:
+    get:
+      operationId: listAuditEvents
+      responses: {'200': {description: ok}}

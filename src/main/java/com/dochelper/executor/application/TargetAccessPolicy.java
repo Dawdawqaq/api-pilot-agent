@@ -46,9 +46,6 @@ public class TargetAccessPolicy {
                     "环境 " + environment.name() + " 不允许 " + method + " 请求"
             );
         }
-        if ("DELETE".equals(method) && !Boolean.TRUE.equals(step.dangerousOperationConfirmed())) {
-            throw new BusinessException(ExecutionErrorCode.DANGEROUS_CONFIRMATION_REQUIRED);
-        }
         validateHeaders(step);
         return method;
     }

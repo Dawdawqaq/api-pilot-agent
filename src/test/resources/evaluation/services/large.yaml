@@ -1,0 +1,17 @@
+openapi: 3.0.3
+info: {title: Large Commerce API, version: 1.0.0}
+paths:
+  /auth/login: {post: {operationId: login, responses: {'200': {description: ok}, '401': {description: denied}}}}
+  /products: {get: {operationId: listProducts, responses: {'200': {description: ok}}}, post: {operationId: createProduct, responses: {'201': {description: created}}}}
+  /products/{id}: {get: {operationId: getProduct, responses: {'200': {description: ok}, '404': {description: missing}}}, put: {operationId: replaceProduct, responses: {'200': {description: ok}}}, delete: {operationId: deleteProduct, responses: {'204': {description: deleted}}}}
+  /categories: {get: {operationId: listCategories, responses: {'200': {description: ok}}}, post: {operationId: createCategory, responses: {'201': {description: created}}}}
+  /carts: {post: {operationId: createCart, responses: {'201': {description: created}}}}
+  /carts/{id}: {get: {operationId: getCart, responses: {'200': {description: ok}}}, patch: {operationId: updateCart, responses: {'200': {description: ok}}}}
+  /orders: {get: {operationId: listOrders, responses: {'200': {description: ok}}}, post: {operationId: createOrder, responses: {'201': {description: created}, '409': {description: conflict}}}}
+  /orders/{id}: {get: {operationId: getOrder, responses: {'200': {description: ok}, '404': {description: missing}}}, patch: {operationId: updateOrder, responses: {'200': {description: ok}}}, delete: {operationId: cancelOrder, responses: {'204': {description: cancelled}}}}
+  /payments: {post: {operationId: payOrder, responses: {'200': {description: paid}, '409': {description: duplicate}}}}
+  /payments/{id}: {get: {operationId: getPayment, responses: {'200': {description: ok}}}}
+  /shipments: {get: {operationId: listShipments, responses: {'200': {description: ok}}}, post: {operationId: createShipment, responses: {'201': {description: created}}}}
+  /shipments/{id}: {get: {operationId: getShipment, responses: {'200': {description: ok}}}, patch: {operationId: updateShipment, responses: {'200': {description: ok}}}}
+  /coupons: {get: {operationId: listCoupons, responses: {'200': {description: ok}}}, post: {operationId: createCoupon, responses: {'201': {description: created}}}}
+  /inventory: {get: {operationId: getInventory, responses: {'200': {description: ok}}}, patch: {operationId: updateInventory, responses: {'200': {description: ok}}}}

@@ -43,6 +43,8 @@ class ControlledHttpStepExecutorTest {
                 1024 * 1024,
                 512 * 1024,
                 10,
+                2,
+                Duration.ofMillis(10),
                 "(?i).*(authorization|token|password|secret|cookie|api[-_]?key).*"
         );
         executor = new ControlledHttpStepExecutor(

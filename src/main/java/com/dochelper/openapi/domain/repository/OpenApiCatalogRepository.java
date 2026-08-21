@@ -29,4 +29,6 @@ public interface OpenApiCatalogRepository {
     List<ApiEndpoint> findEndpoints(Long projectId, Long importId);
 
     Optional<ApiEndpoint> findEndpoint(Long projectId, Long endpointId);
+
+    Optional<String> findSchemaJson(Long projectId, Long importId, String schemaName);
 }

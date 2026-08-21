@@ -1,0 +1,21 @@
+openapi: 3.0.3
+info: {title: Small Health API, version: 1.0.0}
+paths:
+  /health:
+    get:
+      operationId: health
+      responses:
+        '200':
+          description: healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string, enum: [UP]}
+  /version:
+    get:
+      operationId: version
+      responses:
+        '200': {description: version}

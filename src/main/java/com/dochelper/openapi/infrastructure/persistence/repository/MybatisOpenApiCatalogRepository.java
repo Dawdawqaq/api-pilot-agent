@@ -233,6 +233,17 @@ public class MybatisOpenApiCatalogRepository implements OpenApiCatalogRepository
         return Optional.ofNullable(entity).map(this::toDomain);
     }
 
+    @Override
+    public Optional<String> findSchemaJson(Long projectId, Long importId, String schemaName) {
+        return Optional.ofNullable(schemaMapper.selectOne(
+                Wrappers.<ApiSchemaEntity>lambdaQuery()
+                        .eq(ApiSchemaEntity::getProjectId, projectId)
+                        .eq(ApiSchemaEntity::getImportId, importId)
+                        .eq(ApiSchemaEntity::getSchemaName, schemaName)
+                        .last("LIMIT 1")
+        )).map(ApiSchemaEntity::getSchemaJson);
+    }
+
     private ApiEndpoint toDomain(ApiEndpointEntity entity) {
         List<ParsedParameter> parameters = parameterMapper.selectList(
                 Wrappers.<ApiParameterEntity>lambdaQuery()

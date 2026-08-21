@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 验证 Tika 对文本和 PDF 的统一解析能力。
+ * 验证 Tika 对文本、YAML 和 PDF 的统一解析能力。
  */
 class TikaDocumentExtractorTest {
 
@@ -33,6 +33,23 @@ class TikaDocumentExtractorTest {
         assertThat(document.title()).isEqualTo("authentication");
         assertThat(document.content()).contains("登录认证", "/auth/login");
         assertThat(document.detectedContentType()).contains("text");
+    }
+
+    @Test
+    void shouldExtractYamlContent() {
+        ExtractedDocument document = extractor.extract(
+                """
+                service: japiserver
+                rules:
+                  - health_ready_should_return_200
+                  - login_requires_tenant_code
+                """.getBytes(StandardCharsets.UTF_8),
+                "business-rules.yaml"
+        );
+
+        assertThat(document.title()).isEqualTo("business-rules");
+        assertThat(document.content())
+                .contains("japiserver", "health_ready_should_return_200");
     }
 
     @Test

@@ -16,6 +16,9 @@ public enum ExecutionErrorCode implements ErrorCode {
             "DELETE 请求必须经过人工确认",
             HttpStatus.CONFLICT
     ),
+    WRITE_CONFIRMATION_REQUIRED("EXECUTOR_409_002", "写操作必须经过人工确认", HttpStatus.CONFLICT),
+    ENDPOINT_NOT_IN_CATALOG("EXECUTOR_403_003", "请求接口不在当前 OpenAPI 目录", HttpStatus.FORBIDDEN),
+    ENDPOINT_METHOD_MISMATCH("EXECUTOR_403_004", "请求方法与 OpenAPI 目录不一致", HttpStatus.FORBIDDEN),
     TARGET_BLOCKED("EXECUTOR_403_002", "目标地址被 SSRF 安全策略拒绝", HttpStatus.FORBIDDEN),
     VARIABLE_NOT_FOUND("EXECUTOR_422_001", "模板变量不存在", HttpStatus.UNPROCESSABLE_ENTITY),
     INVALID_JSON_PATH("EXECUTOR_422_002", "JSONPath 表达式无效或未命中", HttpStatus.UNPROCESSABLE_ENTITY),

@@ -9,7 +9,9 @@ import com.dochelper.common.reactive.BlockingOperationExecutor;
 import com.dochelper.openapi.api.vo.ApiEndpointResponse;
 import com.dochelper.openapi.api.vo.OpenApiImportResponse;
 import com.dochelper.openapi.application.OpenApiImportService;
+import com.dochelper.openapi.application.EndpointDependencyGraphService;
 import com.dochelper.openapi.config.OpenApiImportProperties;
+import com.dochelper.openapi.domain.EndpointDependencyEdge;
 import com.dochelper.openapi.exception.OpenApiErrorCode;
 import org.springframework.core.io.buffer.DataBufferLimitException;
 import org.springframework.core.io.buffer.DataBufferUtils;
@@ -38,17 +40,20 @@ public class OpenApiController {
     private final BlockingOperationExecutor blockingExecutor;
     private final ObjectMapper objectMapper;
     private final OpenApiImportProperties properties;
+    private final EndpointDependencyGraphService dependencyGraphService;
 
     public OpenApiController(
             OpenApiImportService service,
             BlockingOperationExecutor blockingExecutor,
             ObjectMapper objectMapper,
-            OpenApiImportProperties properties
+            OpenApiImportProperties properties,
+            EndpointDependencyGraphService dependencyGraphService
     ) {
         this.service = service;
         this.blockingExecutor = blockingExecutor;
         this.objectMapper = objectMapper;
         this.properties = properties;
+        this.dependencyGraphService = dependencyGraphService;
     }
 
     /**
@@ -134,6 +139,17 @@ public class OpenApiController {
     ) {
         return blockingExecutor.execute(() ->
                         ApiEndpointResponse.from(service.getEndpoint(projectId, endpointId), objectMapper))
+                .map(ApiResponse::success);
+    }
+
+    /**
+     * 查询响应字段到后续请求输入的接口依赖候选。
+     */
+    @GetMapping("/dependencies")
+    public Mono<ApiResponse<List<EndpointDependencyEdge>>> dependencies(
+            @PathVariable Long projectId
+    ) {
+        return blockingExecutor.execute(() -> dependencyGraphService.build(projectId))
                 .map(ApiResponse::success);
     }
 }

@@ -26,7 +26,7 @@ public class TikaDocumentExtractor {
     }
 
     /**
-     * 提取 PDF、Markdown 或纯文本正文。
+     * 提取 PDF、Markdown、YAML 或纯文本正文。
      */
     public ExtractedDocument extract(byte[] content, String fileName) {
         Metadata metadata = new Metadata();

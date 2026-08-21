@@ -9,6 +9,7 @@ import com.dochelper.project.domain.ProjectEnvironment;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * 验证方法白名单、危险操作确认和 SSRF 私网拦截。
@@ -27,12 +28,11 @@ class TargetAccessPolicyTest {
     }
 
     @Test
-    void shouldRequireDeleteConfirmation() {
-        assertThatThrownBy(() -> policy.validateAndNormalizeMethod(
+    void shouldLeaveWriteConfirmationToServerPolicy() {
+        assertThat(policy.validateAndNormalizeMethod(
                 environment(true, "GET,DELETE"),
                 step("DELETE", false)
-        )).isInstanceOf(BusinessException.class)
-                .hasMessageContaining("人工确认");
+        )).isEqualTo("DELETE");
     }
 
     @Test

@@ -3,11 +3,18 @@ package com.dochelper.infrastructure;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.dochelper.DocHelperApplication;
+import com.dochelper.agent.domain.repository.AgentTaskRepository;
 import com.dochelper.infrastructure.redis.NamespacedRedisKeyFactory;
 import com.dochelper.infrastructure.storage.ObjectStorageGateway;
 import org.junit.jupiter.api.Test;
@@ -43,9 +50,76 @@ import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMoc
 @ActiveProfiles({"local", "stub"})
 @SpringBootTest(
         classes = DocHelperApplication.class,
-        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = {
+                "dochelper.auth.bootstrap-username=integration-owner",
+                "dochelper.auth.bootstrap-password=Integration-Test-Password-2026!",
+                "dochelper.auth.bootstrap-display-name=集成测试 Owner",
+                "dochelper.auth.jwt-secret=integration-jwt-secret",
+                "dochelper.secret-store.master-key=integration-secret-store-key"
+        }
 )
 class PublicInfrastructureIT {
+
+    private static final byte[] EXECUTION_OPENAPI = """
+            openapi: 3.0.3
+            info:
+              title: 执行器集成测试接口
+              version: 1.0.0
+            paths:
+              /auth/login:
+                post:
+                  operationId: login
+                  responses:
+                    '200':
+                      description: 登录成功
+              /users/{userId}:
+                get:
+                  operationId: getUser
+                  parameters:
+                    - name: userId
+                      in: path
+                      required: true
+                      schema:
+                        type: integer
+                  responses:
+                    '200':
+                      description: 查询成功
+                delete:
+                  operationId: deleteUser
+                  responses:
+                    '204':
+                      description: 删除成功
+              /blocked:
+                get:
+                  operationId: blockedPrivateTarget
+                  responses:
+                    '200':
+                      description: 仅用于验证目标地址策略
+              /agent/login:
+                post:
+                  operationId: agentLogin
+                  responses:
+                    '200':
+                      description: 登录成功
+              /agent/users/{userId}:
+                parameters:
+                  - name: userId
+                    in: path
+                    required: true
+                    schema:
+                      type: integer
+                get:
+                  operationId: getAgentUser
+                  responses:
+                    '200':
+                      description: 查询成功
+                delete:
+                  operationId: deleteAgentUser
+                  responses:
+                    '204':
+                      description: 删除成功
+            """.getBytes(StandardCharsets.UTF_8);
 
     @LocalServerPort
     private int port;
@@ -61,6 +135,9 @@ class PublicInfrastructureIT {
 
     @Autowired
     private ObjectStorageGateway objectStorageGateway;
+
+    @Autowired
+    private AgentTaskRepository agentTaskRepository;
 
     /**
      * 验证 MySQL、Redis、MinIO 和系统接口均使用 DocHelper 独立资源。
@@ -93,7 +170,7 @@ class PublicInfrastructureIT {
                 .expectHeader().exists("X-Request-Id")
                 .expectBody()
                 .jsonPath("$.code").isEqualTo("SUCCESS")
-                .jsonPath("$.data.schemaVersion").isEqualTo("7")
+                .jsonPath("$.data.schemaVersion").isEqualTo("14")
                 .jsonPath("$.data.redisNamespace").isEqualTo("dochelper:")
                 .jsonPath("$.data.qdrantCollection").isEqualTo("dochelper_knowledge")
                 .jsonPath("$.data.objectStorageBucket").isEqualTo("dochelper-files");
@@ -120,13 +197,162 @@ class PublicInfrastructureIT {
     }
 
     /**
+     * 验证匿名免登录模式下项目的创建、查询与全功能访问。
+     */
+    @Test
+    void shouldAllowAnonymousProjectOperations() {
+        WebTestClient client = authenticatedClient();
+        String suffix = UUID.randomUUID().toString().replace("-", "");
+        long projectA = createProject(client, "anon-a-" + suffix, "匿名开源项目 A");
+        long projectB = createProject(client, "anon-b-" + suffix, "匿名开源项目 B");
+
+        client.get().uri("/api/v1/projects/{projectId}", projectA)
+                .exchange()
+                .expectStatus().isOk();
+
+        client.get().uri("/api/v1/projects/{projectId}", projectB)
+                .exchange()
+                .expectStatus().isOk();
+
+        client.get().uri("/api/v1/projects")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.data").isArray();
+    }
+
+    /**
+     * 验证质量评测记录通过仓储持久化，并可按时间倒序查询。
+     */
+    @Test
+    void shouldPersistAndListQualityEvaluationRuns() {
+        WebTestClient owner = authenticatedClient();
+        String datasetVersion = "integration-" + UUID.randomUUID();
+        owner.post()
+                .uri("/api/v1/quality-evaluations")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("""
+                        {
+                          "datasetVersion": "%s",
+                          "serviceCount": 3,
+                          "evaluationCaseCount": 50,
+                          "securityCaseCount": 15,
+                          "passedCaseCount": 42,
+                          "blockedAttackCount": 15,
+                          "taskSuccessRate": 0.84,
+                          "validPlanRate": 0.90,
+                          "securityBlockRate": 1.0,
+                          "p95TaskDurationMs": 1250,
+                          "totalModelTokens": 6400,
+                          "metrics": {"source": "integration-test"}
+                        }
+                        """.formatted(datasetVersion))
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody()
+                .jsonPath("$.data.datasetVersion").isEqualTo(datasetVersion)
+                .jsonPath("$.data.securityBlockRate").isEqualTo(1.0);
+
+        owner.get()
+                .uri(uriBuilder -> uriBuilder.path("/api/v1/quality-evaluations")
+                        .queryParam("limit", 1)
+                        .build())
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.data.length()").isEqualTo(1)
+                .jsonPath("$.data[0].datasetVersion").isEqualTo(datasetVersion);
+    }
+
+    /**
+     * 验证两个实例并发领取同一任务时只有一个租约写入成功，租约释放后可再次领取。
+     */
+    @Test
+    void shouldAllowOnlyOneConcurrentTaskLeaseOwner() throws Exception {
+        WebTestClient owner = authenticatedClient();
+        String suffix = UUID.randomUUID().toString().replace("-", "");
+        long projectId = createProject(owner, "lease-" + suffix, "任务租约项目");
+        JsonNode environment = owner.post()
+                .uri("/api/v1/projects/{projectId}/environments", projectId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("""
+                        {
+                          "name": "lease-environment",
+                          "baseUrl": "https://example.com",
+                          "defaultEnvironment": true
+                        }
+                        """)
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(JsonNode.class)
+                .returnResult()
+                .getResponseBody();
+        assertThat(environment).isNotNull();
+        long environmentId = environment.path("data").path("id").asLong();
+        long conversationId = IdWorker.getId();
+        long taskId = IdWorker.getId();
+        jdbcTemplate.update(
+                """
+                        INSERT INTO agent_conversation(id, project_id, title, status)
+                        VALUES (?, ?, '租约并发验证', 'ACTIVE')
+                        """,
+                conversationId,
+                projectId
+        );
+        jdbcTemplate.update(
+                """
+                        INSERT INTO agent_task(
+                            id, project_id, environment_id, conversation_id, goal, status,
+                            current_step, max_steps, tool_call_count, replan_count,
+                            plan_json, context_json_redacted, cancel_requested, lock_version, deadline_at
+                        ) VALUES (?, ?, ?, ?, '验证租约互斥', 'FAILED', 0, 1, 0, 0, '[]', '{}', 0, 0, ?)
+                        """,
+                taskId,
+                projectId,
+                environmentId,
+                conversationId,
+                LocalDateTime.now().plusMinutes(5)
+        );
+
+        CountDownLatch startGate = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime leaseUntil = now.plusSeconds(30);
+            Future<Boolean> first = executor.submit(() -> {
+                startGate.await();
+                return agentTaskRepository.tryAcquireLease(taskId, "instance-a", now, leaseUntil);
+            });
+            Future<Boolean> second = executor.submit(() -> {
+                startGate.await();
+                return agentTaskRepository.tryAcquireLease(taskId, "instance-b", now, leaseUntil);
+            });
+            startGate.countDown();
+            boolean firstAcquired = first.get();
+            boolean secondAcquired = second.get();
+
+            assertThat((firstAcquired ? 1 : 0) + (secondAcquired ? 1 : 0)).isEqualTo(1);
+            String leaseOwner = firstAcquired ? "instance-a" : "instance-b";
+            assertThat(agentTaskRepository.renewLease(
+                    taskId,
+                    leaseOwner,
+                    LocalDateTime.now().plusSeconds(60)
+            )).isTrue();
+            agentTaskRepository.releaseLease(taskId, leaseOwner);
+            assertThat(agentTaskRepository.tryAcquireLease(
+                    taskId,
+                    "instance-after-release",
+                    LocalDateTime.now(),
+                    LocalDateTime.now().plusSeconds(30)
+            )).isTrue();
+        }
+    }
+
+    /**
      * 验证项目、环境、OpenAPI 版本、幂等导入、失败记录和重试完整链路。
      */
     @Test
     void shouldManageProjectAndOpenApiCatalog() throws IOException {
-        WebTestClient client = WebTestClient.bindToServer()
-                .baseUrl("http://localhost:" + port)
-                .build();
+        WebTestClient client = authenticatedClient();
         String projectCode = "stage-two-" + UUID.randomUUID().toString().replace("-", "");
 
         JsonNode project = client.post()
@@ -264,9 +490,7 @@ class PublicInfrastructureIT {
      */
     @Test
     void shouldIndexAndEvaluateKnowledgeDocuments() {
-        WebTestClient client = WebTestClient.bindToServer()
-                .baseUrl("http://localhost:" + port)
-                .build();
+        WebTestClient client = authenticatedClient();
         String projectCode = "stage-three-" + UUID.randomUUID().toString().replace("-", "");
         JsonNode project = client.post()
                 .uri("/api/v1/projects")
@@ -433,9 +657,7 @@ class PublicInfrastructureIT {
                                     }
                                     """)));
 
-            WebTestClient client = WebTestClient.bindToServer()
-                    .baseUrl("http://localhost:" + port)
-                    .build();
+            WebTestClient client = authenticatedClient();
             String projectCode = "stage-four-" + UUID.randomUUID().toString().replace("-", "");
             JsonNode project = client.post()
                     .uri("/api/v1/projects")
@@ -474,6 +696,9 @@ class PublicInfrastructureIT {
                     .getResponseBody();
             assertThat(environment).isNotNull();
             long environmentId = environment.path("data").path("id").asLong();
+
+            uploadOpenApi(client, projectId, "execution-openapi.yaml", EXECUTION_OPENAPI)
+                    .expectStatus().isCreated();
 
             JsonNode execution = client.post()
                     .uri("/api/v1/projects/{projectId}/executions", projectId)
@@ -656,7 +881,7 @@ class PublicInfrastructureIT {
                     .expectStatus().isCreated()
                     .expectBody()
                     .jsonPath("$.data.status").isEqualTo("FAILED")
-                    .jsonPath("$.data.errorCode").isEqualTo("EXECUTOR_409_001");
+                    .jsonPath("$.data.errorCode").isEqualTo("EXECUTOR_409_002");
             wireMock.verify(0, deleteRequestedFor(urlEqualTo("/users/7")));
 
             client.delete()
@@ -701,9 +926,7 @@ class PublicInfrastructureIT {
             wireMock.stubFor(delete(urlEqualTo("/agent/users/9"))
                     .willReturn(aResponse().withStatus(204)));
 
-            WebTestClient client = WebTestClient.bindToServer()
-                    .baseUrl("http://localhost:" + port)
-                    .build();
+            WebTestClient client = authenticatedClient();
             String projectCode = "stage-five-" + UUID.randomUUID().toString().replace("-", "");
             JsonNode project = client.post()
                     .uri("/api/v1/projects")
@@ -742,6 +965,9 @@ class PublicInfrastructureIT {
                     .getResponseBody();
             assertThat(environment).isNotNull();
             long environmentId = environment.path("data").path("id").asLong();
+
+            uploadOpenApi(client, projectId, "agent-openapi.yaml", EXECUTION_OPENAPI)
+                    .expectStatus().isCreated();
 
             JsonNode created = client.post()
                     .uri("/api/v1/projects/{projectId}/agent-tasks", projectId)
@@ -1093,6 +1319,31 @@ class PublicInfrastructureIT {
             Thread.sleep(100);
         }
         throw new AssertionError("等待 Agent 状态超时，最后响应：" + latest);
+    }
+
+    private WebTestClient authenticatedClient() {
+        return WebTestClient.bindToServer()
+                .baseUrl("http://localhost:" + port)
+                .build();
+    }
+
+    private long createProject(WebTestClient client, String code, String name) {
+        JsonNode project = client.post()
+                .uri("/api/v1/projects")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("""
+                        {
+                          "code": "%s",
+                          "name": "%s"
+                        }
+                        """.formatted(code, name))
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(JsonNode.class)
+                .returnResult()
+                .getResponseBody();
+        assertThat(project).isNotNull();
+        return project.path("data").path("id").asLong();
     }
 
     private WebTestClient.ResponseSpec uploadOpenApi(

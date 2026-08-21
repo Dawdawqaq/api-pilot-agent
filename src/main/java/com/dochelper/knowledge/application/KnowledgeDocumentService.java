@@ -264,7 +264,9 @@ public class KnowledgeDocumentService {
         if (!normalized.endsWith(".pdf")
                 && !normalized.endsWith(".md")
                 && !normalized.endsWith(".markdown")
-                && !normalized.endsWith(".txt")) {
+                && !normalized.endsWith(".txt")
+                && !normalized.endsWith(".yaml")
+                && !normalized.endsWith(".yml")) {
             throw new BusinessException(KnowledgeErrorCode.UNSUPPORTED_FILE_TYPE);
         }
     }

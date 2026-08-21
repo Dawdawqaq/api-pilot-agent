@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import reactor.core.publisher.Mono;
 
 /**
@@ -70,5 +72,19 @@ public class TestReportController {
                         objectMapper
                 ))
                 .map(ApiResponse::success);
+    }
+
+    /**
+     * GET /api/v1/projects/{projectId}/reports/{reportId}/junit.xml。
+     */
+    @GetMapping(value = "/{reportId}/junit.xml", produces = MediaType.APPLICATION_XML_VALUE)
+    public Mono<ResponseEntity<String>> exportJUnit(
+            @PathVariable Long projectId,
+            @PathVariable Long reportId
+    ) {
+        return blockingExecutor.execute(() -> service.exportJUnit(projectId, reportId))
+                .map(xml -> ResponseEntity.ok()
+                        .contentType(MediaType.APPLICATION_XML)
+                        .body(xml));
     }
 }

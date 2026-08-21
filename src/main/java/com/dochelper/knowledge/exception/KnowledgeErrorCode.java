@@ -10,7 +10,11 @@ public enum KnowledgeErrorCode implements ErrorCode {
 
     EMPTY_FILE("KNOWLEDGE_400_001", "文档文件不能为空", HttpStatus.BAD_REQUEST),
     FILE_TOO_LARGE("KNOWLEDGE_413_001", "文档文件超过大小限制", HttpStatus.PAYLOAD_TOO_LARGE),
-    UNSUPPORTED_FILE_TYPE("KNOWLEDGE_400_002", "仅支持 PDF、Markdown 和 TXT 文件", HttpStatus.BAD_REQUEST),
+    UNSUPPORTED_FILE_TYPE(
+            "KNOWLEDGE_400_002",
+            "仅支持 PDF、Markdown、TXT 和 YAML 文件",
+            HttpStatus.BAD_REQUEST
+    ),
     DOCUMENT_NOT_FOUND("KNOWLEDGE_404_001", "知识库文档不存在", HttpStatus.NOT_FOUND),
     DOCUMENT_NOT_RETRYABLE("KNOWLEDGE_409_001", "仅失败文档可以重试索引", HttpStatus.CONFLICT),
     DOCUMENT_NOT_INDEXED("KNOWLEDGE_409_002", "知识库文档尚未完成索引", HttpStatus.CONFLICT),
