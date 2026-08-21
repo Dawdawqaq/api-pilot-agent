@@ -11,7 +11,9 @@ public record AgentConfirmation(
         int stepIndex,
         ConfirmationStatus status,
         String requestJson,
+        String planHash,
         String decisionNote,
+        Long decidedByUserId,
         LocalDateTime expiresAt,
         LocalDateTime createdAt,
         LocalDateTime decidedAt

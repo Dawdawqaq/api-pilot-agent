@@ -22,6 +22,7 @@ public class AgentTaskEntity {
     private Integer maxSteps;
     private Integer toolCallCount;
     private Integer replanCount;
+    private Integer modificationCount;
     private String planJson;
     private String contextJsonRedacted;
     private String resultSummary;
@@ -29,6 +30,9 @@ public class AgentTaskEntity {
     private String errorMessage;
     private Boolean cancelRequested;
     private Integer lockVersion;
+    private String leaseOwner;
+    private LocalDateTime leaseUntil;
+    private LocalDateTime claimedAt;
     private LocalDateTime deadlineAt;
     private LocalDateTime createdAt;
     private LocalDateTime startedAt;
@@ -55,6 +59,8 @@ public class AgentTaskEntity {
     public void setToolCallCount(Integer toolCallCount) { this.toolCallCount = toolCallCount; }
     public Integer getReplanCount() { return replanCount; }
     public void setReplanCount(Integer replanCount) { this.replanCount = replanCount; }
+    public Integer getModificationCount() { return modificationCount; }
+    public void setModificationCount(Integer modificationCount) { this.modificationCount = modificationCount; }
     public String getPlanJson() { return planJson; }
     public void setPlanJson(String planJson) { this.planJson = planJson; }
     public String getContextJsonRedacted() { return contextJsonRedacted; }
@@ -73,6 +79,12 @@ public class AgentTaskEntity {
     }
     public Integer getLockVersion() { return lockVersion; }
     public void setLockVersion(Integer lockVersion) { this.lockVersion = lockVersion; }
+    public String getLeaseOwner() { return leaseOwner; }
+    public void setLeaseOwner(String leaseOwner) { this.leaseOwner = leaseOwner; }
+    public LocalDateTime getLeaseUntil() { return leaseUntil; }
+    public void setLeaseUntil(LocalDateTime leaseUntil) { this.leaseUntil = leaseUntil; }
+    public LocalDateTime getClaimedAt() { return claimedAt; }
+    public void setClaimedAt(LocalDateTime claimedAt) { this.claimedAt = claimedAt; }
     public LocalDateTime getDeadlineAt() { return deadlineAt; }
     public void setDeadlineAt(LocalDateTime deadlineAt) { this.deadlineAt = deadlineAt; }
     public LocalDateTime getCreatedAt() { return createdAt; }

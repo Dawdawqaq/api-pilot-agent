@@ -2,6 +2,7 @@ package com.dochelper.agent.tool;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.dochelper.agent.exception.AgentErrorCode;
@@ -83,6 +84,20 @@ public class AgentToolService {
             ExecuteScenarioRequest request
     ) {
         return executionService.execute(projectId, request);
+    }
+
+    /**
+     * 供 Agent 主循环使用的服务端确认执行入口。
+     */
+    public ScenarioExecutionResult executeConfirmedHttpRequest(
+            Long taskId,
+            Long projectId,
+            ExecuteScenarioRequest request,
+            Set<Integer> confirmedStepIndexes
+    ) {
+        return executionService.executeForAgent(
+                taskId, projectId, request, confirmedStepIndexes
+        );
     }
 
     /**

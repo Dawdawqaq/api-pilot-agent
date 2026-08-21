@@ -8,6 +8,7 @@ import com.dochelper.agent.api.vo.AgentTaskEventResponse;
 import com.dochelper.agent.api.vo.AgentTaskResponse;
 import com.dochelper.agent.application.AgentTaskService;
 import com.dochelper.agent.application.AgentEventStreamService;
+import com.dochelper.common.security.CurrentUserAccessor;
 import com.dochelper.common.api.ApiResponse;
 import com.dochelper.common.reactive.BlockingOperationExecutor;
 import jakarta.validation.Valid;
@@ -36,15 +37,18 @@ public class AgentTaskController {
     private final AgentTaskService service;
     private final AgentEventStreamService streamService;
     private final BlockingOperationExecutor blockingExecutor;
+    private final CurrentUserAccessor currentUserAccessor;
 
     public AgentTaskController(
             AgentTaskService service,
             AgentEventStreamService streamService,
-            BlockingOperationExecutor blockingExecutor
+            BlockingOperationExecutor blockingExecutor,
+            CurrentUserAccessor currentUserAccessor
     ) {
         this.service = service;
         this.streamService = streamService;
         this.blockingExecutor = blockingExecutor;
+        this.currentUserAccessor = currentUserAccessor;
     }
 
     /**
@@ -130,6 +134,22 @@ public class AgentTaskController {
     }
 
     /**
+     * 人工多轮对话修改待确认的执行计划。
+     *
+     * <p>POST /api/v1/projects/{projectId}/agent-tasks/{taskId}/modify</p>
+     */
+    @PostMapping("/{taskId}/modify")
+    public Mono<ApiResponse<AgentTaskResponse>> modify(
+            @PathVariable Long projectId,
+            @PathVariable Long taskId,
+            @Valid @RequestBody com.dochelper.agent.api.dto.ModifyPlanRequest request
+    ) {
+        return blockingExecutor.execute(() -> service.modifyPlan(
+                projectId, taskId, request
+        )).map(ApiResponse::success);
+    }
+
+    /**
      * 批准或拒绝待确认危险操作。
      *
      * <p>POST /api/v1/projects/{projectId}/agent-tasks/{taskId}/confirmation</p>
@@ -140,7 +160,10 @@ public class AgentTaskController {
             @PathVariable Long taskId,
             @Valid @RequestBody ConfirmationDecisionRequest request
     ) {
-        return blockingExecutor.execute(() -> service.confirm(projectId, taskId, request))
+        return currentUserAccessor.userId()
+                .flatMap(userId -> blockingExecutor.execute(() -> service.confirm(
+                        projectId, taskId, userId, request
+                )))
                 .map(ApiResponse::success);
     }
 

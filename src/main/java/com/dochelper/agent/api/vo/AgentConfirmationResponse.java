@@ -12,6 +12,7 @@ public record AgentConfirmationResponse(
         int stepIndex,
         String status,
         String decisionNote,
+        Long decidedByUserId,
         LocalDateTime expiresAt,
         LocalDateTime createdAt,
         LocalDateTime decidedAt
@@ -23,6 +24,7 @@ public record AgentConfirmationResponse(
                 value.stepIndex(),
                 value.status().name(),
                 value.decisionNote(),
+                value.decidedByUserId(),
                 value.expiresAt(),
                 value.createdAt(),
                 value.decidedAt()

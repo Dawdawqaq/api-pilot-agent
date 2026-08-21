@@ -31,6 +31,14 @@ public interface AgentTaskRepository {
 
     List<AgentTask> findTasks(Long projectId, int limit);
 
+    List<AgentTask> findRecoverableTasks(LocalDateTime now, int limit);
+
+    boolean tryAcquireLease(Long taskId, String owner, LocalDateTime now, LocalDateTime leaseUntil);
+
+    boolean renewLease(Long taskId, String owner, LocalDateTime leaseUntil);
+
+    void releaseLease(Long taskId, String owner);
+
     void updatePlan(Long taskId, String planJson, String contextJsonRedacted);
 
     void updateProgress(
@@ -71,6 +79,21 @@ public interface AgentTaskRepository {
             ConfirmationStatus expectedStatus,
             ConfirmationStatus decidedStatus,
             String decisionNote,
+            Long decidedByUserId,
             LocalDateTime decidedAt
+    );
+
+    boolean updateModifiedPlan(
+            Long taskId,
+            String planJson,
+            int expectedModificationCount,
+            int nextModificationCount
+    );
+
+    boolean refreshPendingConfirmation(
+            Long taskId,
+            int stepIndex,
+            String newPlanHash,
+            LocalDateTime expiresAt
     );
 }

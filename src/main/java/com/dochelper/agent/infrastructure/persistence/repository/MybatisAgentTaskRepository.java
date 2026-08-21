@@ -137,6 +137,55 @@ public class MybatisAgentTaskRepository implements AgentTaskRepository {
     }
 
     @Override
+    public List<AgentTask> findRecoverableTasks(LocalDateTime now, int limit) {
+        List<String> terminal = List.of(
+                AgentTaskStatus.SUCCEEDED.name(), AgentTaskStatus.FAILED.name(),
+                AgentTaskStatus.CANCELLED.name()
+        );
+        return taskMapper.selectList(Wrappers.<AgentTaskEntity>lambdaQuery()
+                        .notIn(AgentTaskEntity::getStatus, terminal)
+                        .and(wrapper -> wrapper.isNull(AgentTaskEntity::getLeaseUntil)
+                                .or().lt(AgentTaskEntity::getLeaseUntil, now))
+                        .orderByAsc(AgentTaskEntity::getUpdatedAt)
+                        .last("LIMIT " + Math.max(1, Math.min(limit, 100))))
+                .stream().map(this::toDomain).toList();
+    }
+
+    @Override
+    public boolean tryAcquireLease(
+            Long taskId,
+            String owner,
+            LocalDateTime now,
+            LocalDateTime leaseUntil
+    ) {
+        return taskMapper.update(null, Wrappers.<AgentTaskEntity>lambdaUpdate()
+                .eq(AgentTaskEntity::getId, taskId)
+                .and(wrapper -> wrapper.isNull(AgentTaskEntity::getLeaseUntil)
+                        .or().lt(AgentTaskEntity::getLeaseUntil, now)
+                        .or().eq(AgentTaskEntity::getLeaseOwner, owner))
+                .set(AgentTaskEntity::getLeaseOwner, owner)
+                .set(AgentTaskEntity::getLeaseUntil, leaseUntil)
+                .set(AgentTaskEntity::getClaimedAt, now)) == 1;
+    }
+
+    @Override
+    public boolean renewLease(Long taskId, String owner, LocalDateTime leaseUntil) {
+        return taskMapper.update(null, Wrappers.<AgentTaskEntity>lambdaUpdate()
+                .eq(AgentTaskEntity::getId, taskId)
+                .eq(AgentTaskEntity::getLeaseOwner, owner)
+                .set(AgentTaskEntity::getLeaseUntil, leaseUntil)) == 1;
+    }
+
+    @Override
+    public void releaseLease(Long taskId, String owner) {
+        taskMapper.update(null, Wrappers.<AgentTaskEntity>lambdaUpdate()
+                .eq(AgentTaskEntity::getId, taskId)
+                .eq(AgentTaskEntity::getLeaseOwner, owner)
+                .set(AgentTaskEntity::getLeaseOwner, null)
+                .set(AgentTaskEntity::getLeaseUntil, null));
+    }
+
+    @Override
     public void updatePlan(Long taskId, String planJson, String contextJsonRedacted) {
         AgentTaskEntity entity = new AgentTaskEntity();
         entity.setId(taskId);
@@ -275,6 +324,7 @@ public class MybatisAgentTaskRepository implements AgentTaskRepository {
                 Wrappers.<AgentConfirmationEntity>lambdaQuery()
                         .eq(AgentConfirmationEntity::getTaskId, taskId)
                         .eq(AgentConfirmationEntity::getStepIndex, stepIndex)
+                        .orderByDesc(AgentConfirmationEntity::getCreatedAt)
                         .last("LIMIT 1")
         )).map(this::toDomain);
     }
@@ -285,6 +335,7 @@ public class MybatisAgentTaskRepository implements AgentTaskRepository {
             ConfirmationStatus expectedStatus,
             ConfirmationStatus decidedStatus,
             String decisionNote,
+            Long decidedByUserId,
             LocalDateTime decidedAt
     ) {
         return confirmationMapper.update(
@@ -294,7 +345,43 @@ public class MybatisAgentTaskRepository implements AgentTaskRepository {
                         .eq(AgentConfirmationEntity::getStatus, expectedStatus.name())
                         .set(AgentConfirmationEntity::getStatus, decidedStatus.name())
                         .set(AgentConfirmationEntity::getDecisionNote, decisionNote)
+                        .set(AgentConfirmationEntity::getDecidedByUserId, decidedByUserId)
                         .set(AgentConfirmationEntity::getDecidedAt, decidedAt)
+        ) == 1;
+    }
+
+    @Override
+    public boolean updateModifiedPlan(
+            Long taskId,
+            String planJson,
+            int expectedModificationCount,
+            int nextModificationCount
+    ) {
+        return taskMapper.update(
+                null,
+                Wrappers.<AgentTaskEntity>lambdaUpdate()
+                        .eq(AgentTaskEntity::getId, taskId)
+                        .eq(AgentTaskEntity::getModificationCount, expectedModificationCount)
+                        .set(AgentTaskEntity::getPlanJson, planJson)
+                        .set(AgentTaskEntity::getModificationCount, nextModificationCount)
+        ) == 1;
+    }
+
+    @Override
+    public boolean refreshPendingConfirmation(
+            Long taskId,
+            int stepIndex,
+            String newPlanHash,
+            LocalDateTime expiresAt
+    ) {
+        return confirmationMapper.update(
+                null,
+                Wrappers.<AgentConfirmationEntity>lambdaUpdate()
+                        .eq(AgentConfirmationEntity::getTaskId, taskId)
+                        .eq(AgentConfirmationEntity::getStepIndex, stepIndex)
+                        .eq(AgentConfirmationEntity::getStatus, ConfirmationStatus.PENDING.name())
+                        .set(AgentConfirmationEntity::getPlanHash, newPlanHash)
+                        .set(AgentConfirmationEntity::getExpiresAt, expiresAt)
         ) == 1;
     }
 
@@ -310,6 +397,7 @@ public class MybatisAgentTaskRepository implements AgentTaskRepository {
         entity.setMaxSteps(value.maxSteps());
         entity.setToolCallCount(value.toolCallCount());
         entity.setReplanCount(value.replanCount());
+        entity.setModificationCount(value.modificationCount());
         entity.setPlanJson(toJson(value.plan()));
         entity.setContextJsonRedacted(value.contextJsonRedacted());
         entity.setResultSummary(value.resultSummary());
@@ -351,7 +439,9 @@ public class MybatisAgentTaskRepository implements AgentTaskRepository {
         entity.setStepIndex(value.stepIndex());
         entity.setStatus(value.status().name());
         entity.setRequestJson(value.requestJson());
+        entity.setPlanHash(value.planHash());
         entity.setDecisionNote(value.decisionNote());
+        entity.setDecidedByUserId(value.decidedByUserId());
         entity.setExpiresAt(value.expiresAt());
         entity.setCreatedAt(value.createdAt());
         entity.setDecidedAt(value.decidedAt());
@@ -370,6 +460,7 @@ public class MybatisAgentTaskRepository implements AgentTaskRepository {
                 entity.getMaxSteps(),
                 entity.getToolCallCount(),
                 entity.getReplanCount(),
+                entity.getModificationCount() == null ? 0 : entity.getModificationCount(),
                 fromPlanJson(entity.getPlanJson()),
                 entity.getContextJsonRedacted(),
                 entity.getResultSummary(),
@@ -452,7 +543,9 @@ public class MybatisAgentTaskRepository implements AgentTaskRepository {
                 entity.getStepIndex(),
                 ConfirmationStatus.valueOf(entity.getStatus()),
                 entity.getRequestJson(),
+                entity.getPlanHash(),
                 entity.getDecisionNote(),
+                entity.getDecidedByUserId(),
                 entity.getExpiresAt(),
                 entity.getCreatedAt(),
                 entity.getDecidedAt()

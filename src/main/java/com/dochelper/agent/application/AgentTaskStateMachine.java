@@ -34,7 +34,11 @@ public class AgentTaskStateMachine {
                 AgentTaskStatus.REPLANNING,
                 AgentTaskStatus.REPORTING
         );
-        allow(AgentTaskStatus.REPLANNING, AgentTaskStatus.EXECUTING);
+        allow(
+                AgentTaskStatus.REPLANNING,
+                AgentTaskStatus.EXECUTING,
+                AgentTaskStatus.WAITING_CONFIRMATION
+        );
         allow(AgentTaskStatus.REPORTING, AgentTaskStatus.SUCCEEDED);
         for (AgentTaskStatus status : AgentTaskStatus.values()) {
             if (!status.terminal()) {

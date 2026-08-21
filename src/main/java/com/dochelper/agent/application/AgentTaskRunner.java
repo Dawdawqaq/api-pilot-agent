@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
+import java.util.UUID;
 
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -43,13 +44,18 @@ import com.dochelper.openapi.domain.repository.OpenApiCatalogRepository;
 import com.dochelper.retrieval.domain.RetrievalResult;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.scheduling.annotation.Scheduled;
 
 /**
  * 执行 Agent 的检索、规划、行动、观察、重规划和报告循环。
  */
 @Component
 public class AgentTaskRunner {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(AgentTaskRunner.class);
 
     private final AgentTaskRepository repository;
     private final AgentToolService tools;
@@ -62,6 +68,7 @@ public class AgentTaskRunner {
     private final ObjectMapper objectMapper;
     private final Validator validator;
     private final Set<Long> runningTasks = ConcurrentHashMap.newKeySet();
+    private final String leaseOwner = "agent-" + UUID.randomUUID();
 
     public AgentTaskRunner(
             AgentTaskRepository repository,
@@ -91,7 +98,7 @@ public class AgentTaskRunner {
      * 启动新任务的 ReAct 流程。
      */
     public void runNew(Long projectId, Long taskId) {
-        if (!runningTasks.add(taskId)) {
+        if (!acquire(taskId)) {
             return;
         }
         try {
@@ -124,7 +131,9 @@ public class AgentTaskRunner {
 
             task = requireTask(projectId, taskId);
             transition(task, AgentTaskStatus.PLANNING, AgentEventType.STATE_CHANGED, Map.of());
-            List<ApiEndpoint> endpoints = openApiRepository.findEndpoints(projectId, null);
+            List<ApiEndpoint> endpoints = selectEndpointCandidates(
+                    runtime.goal(), openApiRepository.findEndpoints(projectId, null)
+            );
             List<AgentPlanStep> plan = planner.plan(new AgentPlanningContext(
                     taskId,
                     projectId,
@@ -135,13 +144,14 @@ public class AgentTaskRunner {
                     runtime.planHint()
             ));
             validatePlan(plan);
-            runtimeRegistry.updatePlan(taskId, plan);
+            String runtimeContextRef = runtimeRegistry.updatePlan(taskId, plan);
             repository.updatePlan(
                     taskId,
                     toSanitizedJson(plan),
                     toSanitizedJson(Map.of(
-                            "initialVariables", sanitizer.sanitizeVariables(runtime.initialVariables()),
-                            "citations", evidence.stream().map(RetrievalResult::citation).toList()
+                            "initialVariableNames", runtime.initialVariables().keySet(),
+                            "citations", evidence.stream().map(RetrievalResult::citation).toList(),
+                            "runtimeContextRef", runtimeContextRef
                     ))
             );
             appendEvent(
@@ -161,7 +171,7 @@ public class AgentTaskRunner {
         } catch (Exception exception) {
             failSafely(projectId, taskId, exception);
         } finally {
-            runningTasks.remove(taskId);
+            release(taskId);
         }
     }
 
@@ -169,7 +179,7 @@ public class AgentTaskRunner {
      * 人工批准后继续执行已规划任务。
      */
     public void resumeApproved(Long projectId, Long taskId) {
-        if (!runningTasks.add(taskId)) {
+        if (!acquire(taskId)) {
             return;
         }
         try {
@@ -186,18 +196,81 @@ public class AgentTaskRunner {
         } catch (Exception exception) {
             failSafely(projectId, taskId, exception);
         } finally {
+            release(taskId);
+        }
+    }
+
+    /**
+     * 在应用重启后从已恢复的 SecretStore 上下文继续未完成计划。
+     */
+    public void resumeRecovered(Long projectId, Long taskId) {
+        if (!acquire(taskId)) {
+            return;
+        }
+        try {
+            AgentTask task = requireTask(projectId, taskId);
+            AgentRuntimeRegistry.RuntimeContext runtime = runtimeRegistry.find(taskId)
+                    .orElseThrow(() -> new BusinessException(AgentErrorCode.INVALID_STATE));
+            repository.updateProgress(
+                    taskId, AgentTaskStatus.REPLANNING, task.currentStep(),
+                    task.toolCallCount(), task.replanCount(), task.resultSummary(),
+                    null, null, task.startedAt(), null
+            );
+            appendEvent(
+                    taskId, AgentTaskStatus.REPLANNING, AgentEventType.REPLAN_STARTED,
+                    Map.of("reason", "应用重启后从步骤持久化记录恢复")
+            );
+            executePlan(projectId, taskId, runtime.plan());
+        } catch (Exception exception) {
+            failSafely(projectId, taskId, exception);
+        } finally {
+            release(taskId);
+        }
+    }
+
+    /**
+     * 周期续租，避免长模型调用或 HTTP 请求期间被其他实例重复领取。
+     */
+    @Scheduled(fixedDelay = 10000)
+    public void renewActiveLeases() {
+        LocalDateTime leaseUntil = LocalDateTime.now().plus(properties.leaseDuration());
+        runningTasks.forEach(taskId -> repository.renewLease(taskId, leaseOwner, leaseUntil));
+    }
+
+    private boolean acquire(Long taskId) {
+        if (!runningTasks.add(taskId)) {
+            return false;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        boolean acquired = repository.tryAcquireLease(
+                taskId, leaseOwner, now, now.plus(properties.leaseDuration())
+        );
+        if (!acquired) {
             runningTasks.remove(taskId);
         }
+        return acquired;
+    }
+
+    private void release(Long taskId) {
+        repository.releaseLease(taskId, leaseOwner);
+        runningTasks.remove(taskId);
     }
 
     private void executePlan(Long projectId, Long taskId, List<AgentPlanStep> plan) {
         AgentTask task = requireTask(projectId, taskId);
         checkRunnable(task);
+        Set<Integer> confirmedStepIndexes = plan.stream()
+                .filter(AgentPlanStep::dangerous)
+                .map(AgentPlanStep::index)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        if (!confirmedStepIndexes.isEmpty()) {
+            verifyApprovedPlan(task, plan);
+        }
         transition(task, AgentTaskStatus.EXECUTING, AgentEventType.STATE_CHANGED, Map.of());
         AgentRuntimeRegistry.RuntimeContext runtime = runtimeRegistry.find(taskId)
                 .orElseThrow(() -> new BusinessException(AgentErrorCode.INVALID_STATE));
         List<ExecutionStepRequest> approvedSteps = plan.stream()
-                .map(step -> approveDangerous(step.request()))
+                .map(AgentPlanStep::request)
                 .toList();
         ExecuteScenarioRequest request = new ExecuteScenarioRequest(
                 task.environmentId(),
@@ -206,63 +279,45 @@ public class AgentTaskRunner {
         );
 
         int replanCount = task.replanCount();
-        ScenarioExecutionResult result;
-        while (true) {
-            checkRunnable(requireTask(projectId, taskId));
-            task = requireTask(projectId, taskId);
-            result = invokeTool(
-                    task,
-                    task.currentStep(),
-                    AgentToolName.EXECUTE_HTTP_REQUEST,
-                    request,
-                    () -> tools.executeHttpRequest(projectId, request)
-            );
-            transition(
-                    requireTask(projectId, taskId),
-                    AgentTaskStatus.OBSERVING,
-                    AgentEventType.STATE_CHANGED,
-                    Map.of(
-                            "executionId", result.id(),
-                            "executionStatus", result.status().name(),
-                            "completedSteps", result.completedStepCount()
-                    )
-            );
-            if (result.status() == com.dochelper.executor.domain.ExecutionStatus.SUCCEEDED) {
-                break;
-            }
-            if (!recoverable(result.errorCode()) || replanCount >= properties.maxReplans()) {
+        checkRunnable(requireTask(projectId, taskId));
+        task = requireTask(projectId, taskId);
+        ScenarioExecutionResult result = invokeTool(
+                task,
+                task.currentStep(),
+                AgentToolName.EXECUTE_HTTP_REQUEST,
+                request,
+                () -> tools.executeConfirmedHttpRequest(
+                        taskId, projectId, request, confirmedStepIndexes
+                )
+        );
+        transition(
+                requireTask(projectId, taskId),
+                AgentTaskStatus.OBSERVING,
+                AgentEventType.STATE_CHANGED,
+                Map.of(
+                        "executionId", result.id(),
+                        "executionStatus", result.status().name(),
+                        "completedSteps", result.completedStepCount()
+                )
+        );
+        if (result.status() != com.dochelper.executor.domain.ExecutionStatus.SUCCEEDED) {
+            if (!replannable(result.errorCode()) || replanCount >= properties.maxReplans()) {
                 throw new BusinessException(
                         AgentErrorCode.INVALID_PLAN,
                         "执行计划失败：" + safeMessage(result.errorMessage())
                 );
             }
-            replanCount++;
-            AgentTask current = requireTask(projectId, taskId);
-            stateMachine.assertTransition(current.status(), AgentTaskStatus.REPLANNING);
-            repository.updateProgress(
-                    taskId,
-                    AgentTaskStatus.REPLANNING,
-                    current.currentStep(),
-                    current.toolCallCount(),
-                    replanCount,
-                    null,
-                    null,
-                    null,
-                    current.startedAt(),
-                    null
+            List<AgentPlanStep> revisedPlan = replan(
+                    projectId, taskId, plan, result, replanCount + 1, runtime
             );
-            appendEvent(
-                    taskId,
-                    AgentTaskStatus.REPLANNING,
-                    AgentEventType.REPLAN_STARTED,
-                    Map.of("replanCount", replanCount, "reason", safeMessage(result.errorMessage()))
-            );
-            transition(
-                    requireTask(projectId, taskId),
-                    AgentTaskStatus.EXECUTING,
-                    AgentEventType.STATE_CHANGED,
-                    Map.of("strategy", "对可恢复网络错误重试原计划")
-            );
+            AgentPlanStep risky = revisedPlan.stream().filter(AgentPlanStep::dangerous)
+                    .findFirst().orElse(null);
+            if (risky != null) {
+                waitForConfirmation(projectId, taskId, risky, revisedPlan);
+                return;
+            }
+            executePlan(projectId, taskId, revisedPlan);
+            return;
         }
 
         AgentTask reportingTask = requireTask(projectId, taskId);
@@ -295,6 +350,126 @@ public class AgentTaskRunner {
         completeSuccess(projectId, taskId, report);
     }
 
+    private List<AgentPlanStep> replan(
+            Long projectId,
+            Long taskId,
+            List<AgentPlanStep> originalPlan,
+            ScenarioExecutionResult result,
+            int replanCount,
+            AgentRuntimeRegistry.RuntimeContext runtime
+    ) {
+        AgentTask current = requireTask(projectId, taskId);
+        stateMachine.assertTransition(current.status(), AgentTaskStatus.REPLANNING);
+        int completedCount = (int) result.steps().stream()
+                .takeWhile(com.dochelper.executor.domain.ExecutionStepResult::success)
+                .count();
+        repository.updateProgress(
+                taskId, AgentTaskStatus.REPLANNING, completedCount,
+                current.toolCallCount(), replanCount, null, null, null,
+                current.startedAt(), null
+        );
+        appendEvent(
+                taskId, AgentTaskStatus.REPLANNING, AgentEventType.REPLAN_STARTED,
+                Map.of(
+                        "replanCount", replanCount,
+                        "reason", safeMessage(result.errorMessage()),
+                        "failureCode", result.errorCode() == null ? "UNKNOWN" : result.errorCode()
+                )
+        );
+        Set<String> variableNames = new java.util.LinkedHashSet<>(runtime.initialVariables().keySet());
+        result.steps().stream().filter(com.dochelper.executor.domain.ExecutionStepResult::success)
+                .forEach(step -> variableNames.addAll(step.extractedVariables().keySet()));
+        List<AgentPlanStep> revised = planner.replan(new AgentReplanContext(
+                taskId, projectId, runtime.goal(), originalPlan,
+                result.steps().stream().limit(completedCount).toList(),
+                Set.copyOf(variableNames), result.errorCode(), safeMessage(result.errorMessage()),
+                selectEndpointCandidates(
+                        runtime.goal(), openApiRepository.findEndpoints(projectId, null)
+                )
+        ));
+        validatePlan(revised);
+        validateLockedSteps(originalPlan, revised, completedCount);
+        String runtimeContextRef = runtimeRegistry.updatePlan(taskId, revised);
+        repository.updatePlan(
+                taskId,
+                toSanitizedJson(revised),
+                toSanitizedJson(Map.of(
+                        "replanCount", replanCount,
+                        "failureCode", result.errorCode() == null ? "UNKNOWN" : result.errorCode(),
+                        "lockedStepCount", completedCount,
+                        "runtimeContextRef", runtimeContextRef
+                ))
+        );
+        appendEvent(
+                taskId, AgentTaskStatus.REPLANNING, AgentEventType.PLAN_REVISED,
+                Map.of(
+                        "replanCount", replanCount,
+                        "lockedStepCount", completedCount,
+                        "changedStepIndexes", changedStepIndexes(originalPlan, revised)
+                )
+        );
+        return revised;
+    }
+
+    private void validateLockedSteps(
+            List<AgentPlanStep> original,
+            List<AgentPlanStep> revised,
+            int lockedCount
+    ) {
+        if (revised.size() != original.size()) {
+            throw new BusinessException(AgentErrorCode.INVALID_PLAN, "重规划不能增删已编号步骤");
+        }
+        for (int index = 0; index < lockedCount; index++) {
+            if (!original.get(index).equals(revised.get(index))) {
+                throw new BusinessException(
+                        AgentErrorCode.INVALID_PLAN,
+                        "重规划修改了已成功步骤：" + index
+                );
+            }
+        }
+    }
+
+    private List<Integer> changedStepIndexes(
+            List<AgentPlanStep> original,
+            List<AgentPlanStep> revised
+    ) {
+        List<Integer> changed = new ArrayList<>();
+        for (int index = 0; index < Math.min(original.size(), revised.size()); index++) {
+            if (!original.get(index).equals(revised.get(index))) {
+                changed.add(index);
+            }
+        }
+        return List.copyOf(changed);
+    }
+
+    private List<ApiEndpoint> selectEndpointCandidates(
+            String goal,
+            List<ApiEndpoint> endpoints
+    ) {
+        String normalizedGoal = goal == null ? "" : goal.toLowerCase(java.util.Locale.ROOT);
+        return endpoints.stream()
+                .sorted(java.util.Comparator
+                        .comparingInt((ApiEndpoint endpoint) -> endpointScore(endpoint, normalizedGoal))
+                        .reversed()
+                        .thenComparing(ApiEndpoint::path)
+                        .thenComparing(ApiEndpoint::httpMethod))
+                .limit(Math.max(1, properties.defaultEndpointTopK()))
+                .toList();
+    }
+
+    private int endpointScore(ApiEndpoint endpoint, String goal) {
+        int score = 0;
+        score += containsIgnoreCase(goal, endpoint.path()) ? 8 : 0;
+        score += containsIgnoreCase(goal, endpoint.operationId()) ? 5 : 0;
+        score += containsIgnoreCase(goal, endpoint.summary()) ? 3 : 0;
+        return score;
+    }
+
+    private boolean containsIgnoreCase(String goal, String candidate) {
+        return candidate != null && !candidate.isBlank()
+                && goal.contains(candidate.toLowerCase(java.util.Locale.ROOT));
+    }
+
     private void waitForConfirmation(
             Long projectId,
             Long taskId,
@@ -309,6 +484,8 @@ public class AgentTaskRunner {
                 dangerous.index(),
                 ConfirmationStatus.PENDING,
                 toSanitizedJson(plan.stream().filter(AgentPlanStep::dangerous).toList()),
+                sha256(toJson(plan)),
+                null,
                 null,
                 now.plus(properties.confirmationTimeout()),
                 now,
@@ -338,6 +515,21 @@ public class AgentTaskRunner {
                         "expiresAt", now.plus(properties.confirmationTimeout()).toString()
                 )
         );
+    }
+
+    private void verifyApprovedPlan(AgentTask task, List<AgentPlanStep> plan) {
+        AgentPlanStep firstRisky = plan.stream().filter(AgentPlanStep::dangerous).findFirst()
+                .orElseThrow(() -> new BusinessException(AgentErrorCode.INVALID_PLAN));
+        AgentConfirmation confirmation = repository.findConfirmation(task.id(), firstRisky.index())
+                .orElseThrow(() -> new BusinessException(AgentErrorCode.CONFIRMATION_NOT_FOUND));
+        if (confirmation.status() != ConfirmationStatus.APPROVED
+                || LocalDateTime.now().isAfter(confirmation.expiresAt())
+                || !sha256(toJson(plan)).equals(confirmation.planHash())) {
+            throw new BusinessException(
+                    AgentErrorCode.INVALID_STATE,
+                    "确认记录与当前计划不一致，拒绝执行写操作"
+            );
+        }
     }
 
     private <T> T invokeTool(
@@ -564,6 +756,7 @@ public class AgentTaskRunner {
                 : exception instanceof BusinessException business
                 ? business.getErrorCode().code()
                 : "AGENT_INTERNAL_ERROR";
+        String errorMessage = limit(safeMessage(exception.getMessage()), 1000);
         stateMachine.assertTransition(task.status(), status);
         repository.updateProgress(
                 taskId,
@@ -573,7 +766,7 @@ public class AgentTaskRunner {
                 task.replanCount(),
                 null,
                 errorCode,
-                limit(safeMessage(exception.getMessage()), 1000),
+                errorMessage,
                 task.startedAt(),
                 LocalDateTime.now()
         );
@@ -581,9 +774,46 @@ public class AgentTaskRunner {
                 taskId,
                 status,
                 cancelled ? AgentEventType.TASK_CANCELLED : AgentEventType.TASK_COMPLETED,
-                Map.of("status", status.name(), "errorCode", errorCode)
+                Map.of(
+                        "status", status.name(),
+                        "errorCode", errorCode,
+                        "errorMessage", errorMessage
+                )
         );
+        logTaskFailure(projectId, taskId, task.status(), errorCode, errorMessage, exception, cancelled);
         runtimeRegistry.remove(taskId);
+    }
+
+    /**
+     * 按异常类型记录异步任务终止原因，避免失败只落库而无法从控制台定位。
+     */
+    private void logTaskFailure(
+            Long projectId,
+            Long taskId,
+            AgentTaskStatus previousStatus,
+            String errorCode,
+            String errorMessage,
+            Exception exception,
+            boolean cancelled
+    ) {
+        if (cancelled) {
+            LOGGER.info(
+                    "Agent 任务已取消：projectId={}, taskId={}, previousStatus={}, errorCode={}, errorMessage={}",
+                    projectId, taskId, previousStatus, errorCode, errorMessage
+            );
+            return;
+        }
+        if (exception instanceof BusinessException) {
+            LOGGER.warn(
+                    "Agent 任务执行失败：projectId={}, taskId={}, previousStatus={}, errorCode={}, errorMessage={}",
+                    projectId, taskId, previousStatus, errorCode, errorMessage
+            );
+            return;
+        }
+        LOGGER.error(
+                "Agent 任务发生未预期异常：projectId={}, taskId={}, previousStatus={}, errorCode={}, errorMessage={}",
+                projectId, taskId, previousStatus, errorCode, errorMessage, exception
+        );
     }
 
     private AgentTask requireTask(Long projectId, Long taskId) {
@@ -623,28 +853,10 @@ public class AgentTaskRunner {
         }
     }
 
-    private ExecutionStepRequest approveDangerous(ExecutionStepRequest request) {
-        Boolean dangerousOperationConfirmed = "DELETE".equalsIgnoreCase(request.method())
-                ? Boolean.TRUE
-                : request.dangerousOperationConfirmed();
-        return new ExecutionStepRequest(
-                request.name(),
-                request.method(),
-                request.path(),
-                request.pathVariables(),
-                request.queryParams(),
-                request.headers(),
-                request.body(),
-                request.authentication(),
-                request.extractors(),
-                request.assertions(),
-                dangerousOperationConfirmed
-        );
-    }
-
-    private boolean recoverable(String errorCode) {
-        return "EXECUTOR_502_001".equals(errorCode)
-                || "EXECUTOR_504_001".equals(errorCode);
+    private boolean replannable(String errorCode) {
+        return "EXECUTOR_400_002".equals(errorCode)
+                || "EXECUTOR_422_001".equals(errorCode)
+                || "EXECUTOR_422_002".equals(errorCode);
     }
 
     private void appendEvent(

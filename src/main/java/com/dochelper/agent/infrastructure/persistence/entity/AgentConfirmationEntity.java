@@ -17,7 +17,9 @@ public class AgentConfirmationEntity {
     private Integer stepIndex;
     private String status;
     private String requestJson;
+    private String planHash;
     private String decisionNote;
+    private Long decidedByUserId;
     private LocalDateTime expiresAt;
     private LocalDateTime createdAt;
     private LocalDateTime decidedAt;
@@ -32,8 +34,12 @@ public class AgentConfirmationEntity {
     public void setStatus(String status) { this.status = status; }
     public String getRequestJson() { return requestJson; }
     public void setRequestJson(String requestJson) { this.requestJson = requestJson; }
+    public String getPlanHash() { return planHash; }
+    public void setPlanHash(String planHash) { this.planHash = planHash; }
     public String getDecisionNote() { return decisionNote; }
     public void setDecisionNote(String decisionNote) { this.decisionNote = decisionNote; }
+    public Long getDecidedByUserId() { return decidedByUserId; }
+    public void setDecidedByUserId(Long decidedByUserId) { this.decidedByUserId = decidedByUserId; }
     public LocalDateTime getExpiresAt() { return expiresAt; }
     public void setExpiresAt(LocalDateTime expiresAt) { this.expiresAt = expiresAt; }
     public LocalDateTime getCreatedAt() { return createdAt; }

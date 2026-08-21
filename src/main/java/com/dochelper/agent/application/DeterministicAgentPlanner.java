@@ -42,6 +42,49 @@ public class DeterministicAgentPlanner implements AgentPlanner {
                 ));
     }
 
+    @Override
+    public List<AgentPlanStep> replan(AgentReplanContext context) {
+        int failedIndex = Math.min(context.completedSteps().size(), context.originalPlan().size() - 1);
+        List<AgentPlanStep> revised = new java.util.ArrayList<>(context.originalPlan());
+        AgentPlanStep failed = revised.get(failedIndex);
+        ExecutionStepRequest request = failed.request();
+        if ("EXECUTOR_422_002".equals(context.failureCode())) {
+            request = new ExecutionStepRequest(
+                    request.name(), request.method(), request.path(), request.pathVariables(),
+                    request.queryParams(), request.headers(), request.body(), request.authentication(),
+                    List.of(), request.assertions(), request.dangerousOperationConfirmed()
+            );
+        } else if ("EXECUTOR_422_001".equals(context.failureCode())
+                || "EXECUTOR_400_002".equals(context.failureCode())) {
+            request = context.remainingEndpoints().stream()
+                    .filter(endpoint -> !endpoint.path().contains("{"))
+                    .filter(endpoint -> "GET".equalsIgnoreCase(endpoint.httpMethod())
+                            || "HEAD".equalsIgnoreCase(endpoint.httpMethod()))
+                    .findFirst()
+                    .map(endpoint -> singleEndpointPlan(endpoint).request())
+                    .orElse(request);
+        }
+        revised.set(failedIndex, new AgentPlanStep(
+                failed.index(), failed.objective() + "（根据失败观察修订）", request
+        ));
+        return List.copyOf(revised);
+    }
+
+    @Override
+    public List<AgentPlanStep> modify(AgentModifyPlanContext context) {
+        if (context.currentPlan().isEmpty()) {
+            throw new BusinessException(AgentErrorCode.PLANNING_FAILED, "当前没有待修改的计划");
+        }
+        List<AgentPlanStep> revised = new java.util.ArrayList<>(context.currentPlan());
+        AgentPlanStep first = revised.get(0);
+        revised.set(0, new AgentPlanStep(
+                first.index(),
+                first.objective() + " [已按指令修改: " + context.modificationInstruction() + "]",
+                first.request()
+        ));
+        return List.copyOf(revised);
+    }
+
     private List<AgentPlanStep> mapHints(List<ExecutionStepRequest> hints) {
         return java.util.stream.IntStream.range(0, hints.size())
                 .mapToObj(index -> new AgentPlanStep(

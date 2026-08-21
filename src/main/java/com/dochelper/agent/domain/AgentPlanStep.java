@@ -21,6 +21,15 @@ public record AgentPlanStep(
      * @return 是否为危险操作
      */
     public boolean dangerous() {
-        return "DELETE".equalsIgnoreCase(request.method());
+        String method = request.method().toUpperCase(java.util.Locale.ROOT);
+        if ("DELETE".equals(method) || "PUT".equals(method) || "PATCH".equals(method)) {
+            return true;
+        }
+        if (!"POST".equals(method)) {
+            return false;
+        }
+        String semantic = request.path().toLowerCase(java.util.Locale.ROOT);
+        return !(semantic.contains("/login") || semantic.contains("/auth/token")
+                || semantic.contains("signin"));
     }
 }

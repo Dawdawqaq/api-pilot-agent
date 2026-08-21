@@ -17,6 +17,7 @@ public record AgentTask(
         int maxSteps,
         int toolCallCount,
         int replanCount,
+        int modificationCount,
         List<AgentPlanStep> plan,
         String contextJsonRedacted,
         String resultSummary,
