@@ -5,10 +5,10 @@ target/
 logs/
 .playwright-cli/
 .local-notes/
+.agents/
 *.log
 Thumbs.db
 .DS_Store
-.playwright-cli/
-*.log
-Thumbs.db
-.DS_Store
+_Run_*.*
+_run_*.*
+
