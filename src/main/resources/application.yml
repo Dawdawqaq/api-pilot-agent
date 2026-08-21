@@ -14,14 +14,20 @@ spring:
     max-in-memory-size: 11MB
 
 server:
+  port: 8080
   shutdown: graceful
 
 dochelper:
+  secret-store:
+    master-key: ${SECRET_STORE_MASTER_KEY:}
   ai:
     base-url: ${AI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode}
     api-key: ${AI_API_KEY:}
     chat-model: ${AI_CHAT_MODEL:qwen-plus}
+    embedding-base-url: ${AI_EMBEDDING_BASE_URL:}
+    embedding-api-key: ${AI_EMBEDDING_API_KEY:}
     embedding-model: ${AI_EMBEDDING_MODEL:text-embedding-v4}
+    embedding-dimensions: ${AI_EMBEDDING_DIMENSIONS:}
   redis:
     namespace: "dochelper:"
   storage:
@@ -50,15 +56,21 @@ dochelper:
     max-response-size-bytes: 1048576
     max-request-size-bytes: 524288
     max-steps: 10
-    sensitive-name-pattern: "(?i).*(authorization|token|password|secret|cookie|api[-_]?key).*"
+    max-step-retries: 2
+    retry-backoff: 200ms
+    sensitive-name-pattern: "(?i).*(authorization|token|password|secret|credential|session|cookie|api[-_]?key|email|phone|mobile).*"
   agent:
     max-steps: 10
     max-tool-calls: 30
     max-replans: 2
+    max-plan-modifications: 3
     max-tool-retries: 2
     task-timeout: 2m
     confirmation-timeout: 10m
     event-poll-interval: 500ms
+    lease-duration: 30s
+    max-total-model-tokens: 20000
+    default-endpoint-top-k: 12
 
 mybatis-plus:
   configuration:

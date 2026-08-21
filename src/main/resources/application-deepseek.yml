@@ -3,4 +3,7 @@ dochelper:
     base-url: ${AI_BASE_URL:https://api.deepseek.com}
     api-key: ${AI_API_KEY:}
     chat-model: ${AI_CHAT_MODEL:deepseek-v4-flash}
-    embedding-model: deterministic-local
+    embedding-base-url: ${AI_EMBEDDING_BASE_URL:}
+    embedding-api-key: ${AI_EMBEDDING_API_KEY:}
+    embedding-model: ${AI_EMBEDDING_MODEL:deterministic-local}
+    embedding-dimensions: ${AI_EMBEDDING_DIMENSIONS:}
