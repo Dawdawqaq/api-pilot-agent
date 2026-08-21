@@ -2,6 +2,7 @@ package com.dochelper.project.api;
 
 import java.util.List;
 
+import com.dochelper.common.security.CurrentUserAccessor;
 import com.dochelper.common.api.ApiResponse;
 import com.dochelper.common.reactive.BlockingOperationExecutor;
 import com.dochelper.project.api.dto.CreateEnvironmentRequest;
@@ -34,24 +35,34 @@ public class ProjectController {
 
     private final ProjectApplicationService service;
     private final BlockingOperationExecutor blockingExecutor;
+    private final CurrentUserAccessor currentUserAccessor;
 
-    public ProjectController(ProjectApplicationService service, BlockingOperationExecutor blockingExecutor) {
+    public ProjectController(
+            ProjectApplicationService service,
+            BlockingOperationExecutor blockingExecutor,
+            CurrentUserAccessor currentUserAccessor
+    ) {
         this.service = service;
         this.blockingExecutor = blockingExecutor;
+        this.currentUserAccessor = currentUserAccessor;
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public Mono<ApiResponse<ProjectResponse>> createProject(@Valid @RequestBody CreateProjectRequest request) {
-        return blockingExecutor.execute(() -> ProjectResponse.from(service.createProject(request)))
+        return currentUserAccessor.userId()
+                .flatMap(userId -> blockingExecutor.execute(() -> ProjectResponse.from(
+                        service.createProject(request, userId)
+                )))
                 .map(ApiResponse::success);
     }
 
     @GetMapping
     public Mono<ApiResponse<List<ProjectResponse>>> listProjects() {
-        return blockingExecutor.execute(() -> service.listProjects().stream()
-                        .map(ProjectResponse::from)
-                        .toList())
+        return currentUserAccessor.userId()
+                .flatMap(userId -> blockingExecutor.execute(() -> service.listProjects(userId).stream()
+                                .map(ProjectResponse::from)
+                                .toList()))
                 .map(ApiResponse::success);
     }
 

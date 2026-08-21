@@ -43,7 +43,7 @@ public class ProjectApplicationService {
      * @return 新项目
      */
     @Transactional
-    public ApiProject createProject(CreateProjectRequest request) {
+    public ApiProject createProject(CreateProjectRequest request, Long ownerUserId) {
         String normalizedCode = request.code().trim().toLowerCase(Locale.ROOT);
         projectRepository.findByCode(normalizedCode).ifPresent(project -> {
             throw new BusinessException(ProjectErrorCode.PROJECT_CODE_CONFLICT);
@@ -60,7 +60,7 @@ public class ProjectApplicationService {
         ));
     }
 
-    public List<ApiProject> listProjects() {
+    public List<ApiProject> listProjects(Long userId) {
         return projectRepository.findAll();
     }
 

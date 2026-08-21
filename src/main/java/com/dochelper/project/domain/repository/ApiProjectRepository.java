@@ -18,6 +18,8 @@ public interface ApiProjectRepository {
 
     List<ApiProject> findAll();
 
+    List<ApiProject> findByIds(List<Long> ids);
+
     void update(ApiProject project);
 
     void deleteById(Long id);

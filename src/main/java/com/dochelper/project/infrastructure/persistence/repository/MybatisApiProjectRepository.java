@@ -53,6 +53,17 @@ public class MybatisApiProjectRepository implements ApiProjectRepository {
     }
 
     @Override
+    public List<ApiProject> findByIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        return mapper.selectByIds(ids).stream()
+                .map(this::toDomain)
+                .sorted(java.util.Comparator.comparing(ApiProject::createdAt).reversed())
+                .toList();
+    }
+
+    @Override
     public void update(ApiProject project) {
         mapper.updateById(toEntity(project));
     }
