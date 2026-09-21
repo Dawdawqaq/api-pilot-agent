@@ -4,7 +4,7 @@ import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 
 /**
- * 阶段 0 使用的工具集合。
+ * Agent 框架兼容性测试使用的工具集合。
  */
 public final class CalculatorTools {
 

@@ -1,4 +1,4 @@
-# 阶段 1：构建应用产物
+# 构建应用产物
 FROM maven:3.9-eclipse-temurin-21 AS builder
 WORKDIR /app
 
@@ -7,7 +7,7 @@ COPY src ./src
 
 RUN mvn -B -DskipTests package
 
-# 阶段 2：轻量运行时镜像
+# 创建轻量运行时镜像
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 

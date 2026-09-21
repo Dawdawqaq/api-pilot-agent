@@ -74,12 +74,12 @@ export const ProjectsView = {
               <input type="hidden" id="project-edit-id" value="">
               <div class="form-group">
                 <label class="form-label" for="proj-code">项目编码 <span style="color:var(--color-danger)">*</span></label>
-                <input class="form-input code-font" id="proj-code" required maxlength="64" pattern="[a-z][a-z0-9-]*" placeholder="例如：luminous-blog-api">
+                <input class="form-input code-font" id="proj-code" required maxlength="64" pattern="[a-z][a-z0-9-]*" placeholder="例如：sample-order-api">
                 <span class="form-helper">以小写字母开头，只能包含小写字母、数字和短横线；创建后不可修改</span>
               </div>
               <div class="form-group">
                 <label class="form-label" for="proj-name">项目名称 <span style="color:var(--color-danger)">*</span></label>
-                <input class="form-input" id="proj-name" required placeholder="例如：Luminous Blog API">
+                <input class="form-input" id="proj-name" required placeholder="例如：订单服务 API">
               </div>
               <div class="form-group">
                 <label class="form-label" for="proj-desc">项目描述</label>

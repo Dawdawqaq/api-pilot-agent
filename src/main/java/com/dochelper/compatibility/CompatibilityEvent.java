@@ -3,7 +3,7 @@ package com.dochelper.compatibility;
 import java.time.Instant;
 
 /**
- * 阶段 0 流式兼容性事件。
+ * 流式兼容性事件。
  *
  * @param sequence 事件序号
  * @param type 事件类型

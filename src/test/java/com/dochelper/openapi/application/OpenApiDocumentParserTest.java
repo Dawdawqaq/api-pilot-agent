@@ -19,14 +19,14 @@ class OpenApiDocumentParserTest {
     private final OpenApiDocumentParser parser = new OpenApiDocumentParser();
 
     @Test
-    void shouldParseJApiServerYamlFixture() throws IOException {
-        String content = new ClassPathResource("openapi/japiserver-stage2.yaml")
+    void shouldParseSampleApiYamlFixture() throws IOException {
+        String content = new ClassPathResource("openapi/sample-api.yaml")
                 .getContentAsString(StandardCharsets.UTF_8);
 
         ParsedOpenApiDocument document = parser.parse(content);
 
         assertThat(document.specificationVersion()).isEqualTo("3.0.3");
-        assertThat(document.title()).contains("JApiServer");
+        assertThat(document.title()).contains("示例服务");
         assertThat(document.endpoints()).hasSize(4);
         assertThat(document.schemas()).hasSize(3);
         assertThat(document.securitySchemes()).hasSize(1);

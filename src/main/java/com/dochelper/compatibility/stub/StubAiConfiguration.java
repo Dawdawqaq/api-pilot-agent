@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 
 /**
- * 无真实 API Key 时使用的阶段 0 模型配置。
+ * 无真实 API Key 时使用的本地模型配置。
  */
 @Configuration(proxyBeanMethods = false)
 @Profile("stub")
@@ -21,7 +21,7 @@ public class StubAiConfiguration {
      */
     @Bean
     ChatModel stubChatModel() {
-        return new StubChatModel("阶段 0 Stub 响应");
+        return new StubChatModel("本地 Stub 响应");
     }
 
     /**

@@ -377,7 +377,7 @@ class PublicInfrastructureIT {
     @Test
     void shouldManageProjectAndOpenApiCatalog() throws IOException {
         WebTestClient client = authenticatedClient();
-        String projectCode = "stage-two-" + UUID.randomUUID().toString().replace("-", "");
+        String projectCode = "openapi-it-" + UUID.randomUUID().toString().replace("-", "");
 
         JsonNode project = client.post()
                 .uri("/api/v1/projects")
@@ -385,8 +385,8 @@ class PublicInfrastructureIT {
                 .bodyValue("""
                         {
                           "code": "%s",
-                          "name": "[E2E_TEST] JApiServer",
-                          "description": "阶段 2 集成测试"
+                          "name": "[E2E_TEST] 示例 API",
+                          "description": "OpenAPI 目录集成测试"
                         }
                         """.formatted(projectCode))
                 .exchange()
@@ -429,8 +429,8 @@ class PublicInfrastructureIT {
                 .expectBody()
                 .jsonPath("$.code").isEqualTo("PROJECT_400_001");
 
-        byte[] yaml = new ClassPathResource("openapi/japiserver-stage2.yaml").getContentAsByteArray();
-        JsonNode firstImport = uploadOpenApi(client, projectId, "japiserver.yaml", yaml)
+        byte[] yaml = new ClassPathResource("openapi/sample-api.yaml").getContentAsByteArray();
+        JsonNode firstImport = uploadOpenApi(client, projectId, "sample-api.yaml", yaml)
                 .expectStatus().isCreated()
                 .expectBody(JsonNode.class)
                 .returnResult()

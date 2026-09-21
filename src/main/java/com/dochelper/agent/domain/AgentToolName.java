@@ -1,7 +1,7 @@
 package com.dochelper.agent.domain;
 
 /**
- * MVP 固定的六个 Agent 工具。
+ * Agent 执行链允许使用的工具。
  */
 public enum AgentToolName {
     SEARCH_API_DOCUMENT("searchApiDocument"),

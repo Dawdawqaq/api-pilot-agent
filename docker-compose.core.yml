@@ -10,7 +10,7 @@ services:
       DB_USERNAME: dochelper
       DB_PASSWORD: ${DB_PASSWORD:?请设置数据库密码}
       SECRET_STORE_MASTER_KEY: ${SECRET_STORE_MASTER_KEY:?请设置稳定主密钥}
-      AI_BASE_URL: https://api.deepseek.com
+      AI_BASE_URL: ${AI_BASE_URL:-https://api.deepseek.com}
       AI_CHAT_MODEL: ${AI_CHAT_MODEL:-deepseek-flash}
       AI_API_KEY: ${AI_API_KEY:?请设置真实模型密钥}
     depends_on:

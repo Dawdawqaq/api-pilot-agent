@@ -39,7 +39,7 @@ class TikaDocumentExtractorTest {
     void shouldExtractYamlContent() {
         ExtractedDocument document = extractor.extract(
                 """
-                service: japiserver
+                service: sample-api
                 rules:
                   - health_ready_should_return_200
                   - login_requires_tenant_code
@@ -49,7 +49,7 @@ class TikaDocumentExtractorTest {
 
         assertThat(document.title()).isEqualTo("business-rules");
         assertThat(document.content())
-                .contains("japiserver", "health_ready_should_return_200");
+                .contains("sample-api", "health_ready_should_return_200");
     }
 
     @Test

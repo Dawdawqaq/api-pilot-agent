@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
 
 /**
- * 阶段 0 SSE 兼容性验证接口。
+ * SSE 兼容性验证接口。
  */
 @RestController
 @RequestMapping("/api/compatibility")
@@ -28,7 +28,7 @@ public class CompatibilityStreamController {
         return Flux.just(
                         new CompatibilityEvent(1, "PLANNING", "正在生成执行计划", Instant.now()),
                         new CompatibilityEvent(2, "EXECUTING", "正在调用兼容性工具", Instant.now()),
-                        new CompatibilityEvent(3, "SUCCEEDED", "阶段 0 流式验证完成", Instant.now())
+                        new CompatibilityEvent(3, "SUCCEEDED", "流式验证完成", Instant.now())
                 )
                 .delayElements(Duration.ofMillis(10))
                 .map(event -> ServerSentEvent.<CompatibilityEvent>builder()

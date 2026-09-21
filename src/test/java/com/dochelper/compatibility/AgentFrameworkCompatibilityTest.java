@@ -23,7 +23,7 @@ class AgentFrameworkCompatibilityTest {
 
         ReactAgent agent = ReactAgent.builder()
                 .name("compatibility_agent")
-                .model(new StubChatModel("阶段 0 Stub 响应"))
+                .model(new StubChatModel("本地 Stub 响应"))
                 .description("用于验证依赖兼容性的智能体")
                 .instruction("仅执行兼容性验证")
                 .methodTools(calculatorTools)

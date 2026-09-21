@@ -13,7 +13,7 @@ import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import reactor.core.publisher.Flux;
 
 /**
- * 阶段 0 使用的确定性对话模型，不访问外部模型服务。
+ * 用于离线开发的确定性对话模型，不访问外部模型服务。
  */
 public final class StubChatModel implements ChatModel {
 

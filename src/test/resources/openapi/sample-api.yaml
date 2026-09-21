@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
-  title: JApiServer 阶段 2 导入样例
+  title: 示例服务 OpenAPI
   version: 1.0.0
-  description: 根据 JApiServer 现有 Controller 路径整理的测试夹具，不代表该项目已启用 springdoc。
+  description: 用于验证 OpenAPI 导入、鉴权定义和路径参数解析的固定测试夹具。
 servers:
   - url: http://localhost:8080
 paths:
