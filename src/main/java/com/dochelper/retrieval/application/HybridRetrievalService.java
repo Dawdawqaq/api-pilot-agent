@@ -32,11 +32,13 @@ public class HybridRetrievalService {
     private final VectorStoreRetriever vectorRetriever;
     private final KeywordTokenizer tokenizer;
     private final KnowledgeProperties properties;
+    @org.springframework.beans.factory.annotation.Value("${dochelper.knowledge.enabled:true}")
+    private boolean knowledgeEnabled = true;
 
     public HybridRetrievalService(
             KnowledgeRepository repository,
             ApiProjectRepository projectRepository,
-            VectorStoreRetriever vectorRetriever,
+            @org.springframework.lang.Nullable VectorStoreRetriever vectorRetriever,
             KeywordTokenizer tokenizer,
             KnowledgeProperties properties
     ) {
@@ -52,6 +54,13 @@ public class HybridRetrievalService {
         if (query == null || query.isBlank()) {
             throw new BusinessException(KnowledgeErrorCode.EMPTY_QUERY);
         }
+        // 核心模式明确不使用知识库证据，不能用伪造向量结果冒充检索。
+        if (!knowledgeEnabled) {
+            return List.of();
+        }
+        if (vectorRetriever == null) {
+            throw new BusinessException(KnowledgeErrorCode.FEATURE_DISABLED);
+        }
         int safeTopK = Math.max(1, Math.min(topK, 20));
         int candidateSize = Math.max(safeTopK, properties.retrievalCandidateSize());
         List<KnowledgeChunk> keywordResults = keywordSearch(projectId, query.trim(), candidateSize);
@@ -62,6 +71,15 @@ public class HybridRetrievalService {
                 .filterExpression("project_id == '" + projectId + "'")
                 .build());
         return fuse(projectId, keywordResults, vectorResults, safeTopK);
+    }
+
+    /**
+     * 判断当前运行模式是否启用了业务知识检索。
+     *
+     * @return 是否启用业务知识检索
+     */
+    public boolean isKnowledgeEnabled() {
+        return knowledgeEnabled;
     }
 
     List<RetrievalResult> fuse(

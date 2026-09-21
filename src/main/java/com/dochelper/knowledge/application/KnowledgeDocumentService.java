@@ -48,10 +48,10 @@ public class KnowledgeDocumentService {
     public KnowledgeDocumentService(
             KnowledgeRepository repository,
             ApiProjectRepository projectRepository,
-            ObjectStorageGateway storageGateway,
+            @org.springframework.lang.Nullable ObjectStorageGateway storageGateway,
             TikaDocumentExtractor extractor,
             SectionAwareChunker chunker,
-            VectorStore vectorStore,
+            @org.springframework.lang.Nullable VectorStore vectorStore,
             KnowledgeProperties properties
     ) {
         this.repository = repository;
@@ -69,6 +69,7 @@ public class KnowledgeDocumentService {
             String requestContentType,
             byte[] content
     ) {
+        requireEnabled();
         requireProject(projectId);
         validateFile(fileName, content);
         String hash = sha256(content);
@@ -83,6 +84,7 @@ public class KnowledgeDocumentService {
     }
 
     public KnowledgeDocument retry(Long projectId, Long documentId) {
+        requireEnabled();
         requireProject(projectId);
         KnowledgeDocument document = requireDocument(projectId, documentId);
         if (document.status() != DocumentStatus.FAILED) {
@@ -105,16 +107,19 @@ public class KnowledgeDocumentService {
     }
 
     public List<KnowledgeDocument> list(Long projectId) {
+        requireEnabled();
         requireProject(projectId);
         return repository.findDocuments(projectId);
     }
 
     public KnowledgeDocument get(Long projectId, Long documentId) {
+        requireEnabled();
         requireProject(projectId);
         return requireDocument(projectId, documentId);
     }
 
     public boolean delete(Long projectId, Long documentId) {
+        requireEnabled();
         requireProject(projectId);
         KnowledgeDocument document = requireDocument(projectId, documentId);
         try {
@@ -127,6 +132,15 @@ public class KnowledgeDocumentService {
                     KnowledgeErrorCode.INDEXING_FAILED,
                     "文档删除失败，documentId=" + documentId
             );
+        }
+    }
+
+    @org.springframework.beans.factory.annotation.Value("${dochelper.knowledge.enabled:true}")
+    private boolean knowledgeEnabled = true;
+
+    private void requireEnabled() {
+        if (!knowledgeEnabled || storageGateway == null || vectorStore == null) {
+            throw new BusinessException(KnowledgeErrorCode.FEATURE_DISABLED);
         }
     }
 

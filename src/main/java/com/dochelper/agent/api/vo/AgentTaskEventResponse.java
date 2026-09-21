@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.dochelper.agent.domain.AgentTaskEvent;
+import com.dochelper.common.json.BrowserSafeJsonIds;
 
 /**
  * Agent 任务事件响应。
@@ -26,7 +27,7 @@ public record AgentTaskEventResponse(
                     event.sequenceNo(),
                     event.eventType().name(),
                     event.state().name(),
-                    objectMapper.readTree(event.payloadJson()),
+                    BrowserSafeJsonIds.convert(objectMapper.readTree(event.payloadJson()), objectMapper),
                     event.createdAt()
             );
         } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {

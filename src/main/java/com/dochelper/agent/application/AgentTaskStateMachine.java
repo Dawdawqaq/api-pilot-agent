@@ -45,6 +45,7 @@ public class AgentTaskStateMachine {
                 transitions.computeIfAbsent(status, ignored ->
                                 EnumSet.noneOf(AgentTaskStatus.class))
                         .addAll(EnumSet.of(
+                                AgentTaskStatus.NEEDS_REVIEW,
                                 AgentTaskStatus.FAILED,
                                 AgentTaskStatus.CANCELLED
                         ));

@@ -52,12 +52,41 @@ public class AgentRuntimeRegistry {
         return entry == null ? Optional.empty() : Optional.of(entry.context());
     }
 
+    /**
+     * 在领取任务后按持久化引用恢复，包括应用重启前尚未确认的计划。
+     */
+    public RuntimeContext require(com.dochelper.agent.domain.AgentTask task) {
+        var existing = find(task.id());
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+        try {
+            String reference = objectMapper.readTree(task.contextJsonRedacted()).path("runtimeContextRef").asText("");
+            if (!reference.isBlank() && restore(task.id(), reference)) {
+                return find(task.id()).orElseThrow();
+            }
+        } catch (Exception ignored) {
+            // 不把密文、解密异常或原始上下文写入错误信息。
+        }
+        throw new com.dochelper.common.exception.BusinessException(
+                com.dochelper.agent.exception.AgentErrorCode.RECOVERY_UNAVAILABLE);
+    }
+
     public Optional<String> reference(Long taskId) {
         RuntimeEntry entry = contexts.get(taskId);
         return entry == null ? Optional.empty() : Optional.of(entry.reference());
     }
 
     public String updatePlan(Long taskId, List<AgentPlanStep> plan) {
+        PreparedPlan prepared = preparePlan(taskId, plan);
+        activatePlan(taskId, prepared);
+        return prepared.reference();
+    }
+
+    /**
+     * 先保存候选上下文，数据库提交失败时仍保留原计划及其恢复引用。
+     */
+    public PreparedPlan preparePlan(Long taskId, List<AgentPlanStep> plan) {
         RuntimeEntry current = contexts.get(taskId);
         if (current == null) {
             throw new IllegalStateException("Agent 运行上下文不存在");
@@ -67,10 +96,19 @@ public class AgentRuntimeRegistry {
                 current.context().planHint(), List.copyOf(plan)
         );
         String reference = save(taskId, revised);
-        contexts.put(taskId, new RuntimeEntry(reference, revised));
-        secretStore.delete(current.reference());
-        return reference;
+        return new PreparedPlan(reference, revised);
     }
+
+    public void activatePlan(Long taskId, PreparedPlan prepared) {
+        contexts.put(taskId, new RuntimeEntry(prepared.reference(), prepared.context()));
+        // 旧引用由有效期回收，避免数据库提交前的异常造成恢复信息丢失。
+    }
+
+    public void discardPlan(PreparedPlan prepared) {
+        secretStore.delete(prepared.reference());
+    }
+
+    public record PreparedPlan(String reference, RuntimeContext context) { }
 
     /**
      * 应用重启后使用任务表中的不透明引用恢复上下文。

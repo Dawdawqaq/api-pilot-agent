@@ -13,7 +13,7 @@ WORKDIR /app
 
 COPY --from=builder /app/target/*.jar /app/app.jar
 
-ENV SPRING_PROFILES_ACTIVE=docker,stub
+ENV SPRING_PROFILES_ACTIVE=docker,deepseek,lightweight
 EXPOSE 8080
 
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

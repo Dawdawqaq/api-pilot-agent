@@ -63,6 +63,8 @@ public class ControlledHttpStepExecutor {
         this.properties = properties;
         this.objectMapper = objectMapper;
         HttpClient httpClient = HttpClient.create()
+                // 重试统一由业务策略决策，禁止底层在连接中断时透明重发写请求。
+                .disableRetry(true)
                 .option(
                         ChannelOption.CONNECT_TIMEOUT_MILLIS,
                         Math.toIntExact(properties.connectTimeout().toMillis())

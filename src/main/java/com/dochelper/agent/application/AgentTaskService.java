@@ -59,6 +59,7 @@ public class AgentTaskService {
     private final AgentTaskRunner runner;
     private final AgentPlanner planner;
     private final AgentTaskStateMachine stateMachine;
+    private final AgentTaskAdmissionService admissionService;
     private final TaskExecutor taskExecutor;
     private final SensitiveDataSanitizer sanitizer;
     private final AgentProperties properties;
@@ -73,6 +74,7 @@ public class AgentTaskService {
             AgentTaskRunner runner,
             AgentPlanner planner,
             AgentTaskStateMachine stateMachine,
+            AgentTaskAdmissionService admissionService,
             @Qualifier("agentTaskExecutor") TaskExecutor taskExecutor,
             SensitiveDataSanitizer sanitizer,
             AgentProperties properties,
@@ -86,6 +88,7 @@ public class AgentTaskService {
         this.runner = runner;
         this.planner = planner;
         this.stateMachine = stateMachine;
+        this.admissionService = admissionService;
         this.taskExecutor = taskExecutor;
         this.sanitizer = sanitizer;
         this.properties = properties;
@@ -99,6 +102,14 @@ public class AgentTaskService {
         requireProject(projectId);
         ProjectEnvironment environment = requireEnvironment(projectId, request.environmentId());
         validateRequest(request);
+        return admissionService.admit(projectId, () -> createAdmitted(projectId, environment, request));
+    }
+
+    private AgentTaskResponse createAdmitted(
+            Long projectId,
+            ProjectEnvironment environment,
+            CreateAgentTaskRequest request
+    ) {
         LocalDateTime now = LocalDateTime.now();
         String safeGoal = limit(sanitizer.sanitizeText(request.goal().trim()), 2000);
         AgentConversation conversation = resolveConversation(
@@ -163,7 +174,16 @@ public class AgentTaskService {
                         "conversationId", conversation.id()
                 )
         );
-        taskExecutor.execute(() -> runner.runNew(projectId, taskId));
+        try {
+            taskExecutor.execute(() -> runner.runNew(projectId, taskId));
+        } catch (org.springframework.core.task.TaskRejectedException exception) {
+            BusinessException capacity = new BusinessException(
+                    AgentErrorCode.TASK_CAPACITY_EXCEEDED,
+                    "本机任务队列已满，新任务未开始执行，请等待现有任务结束后重试"
+            );
+            runner.failDispatch(projectId, taskId, capacity);
+            throw capacity;
+        }
         return detail(task);
     }
 
@@ -211,10 +231,21 @@ public class AgentTaskService {
             throw new BusinessException(AgentErrorCode.TASK_BUSY, "当前任务正在修改或规划处理中，请稍后确认");
         }
         try {
+            task = requireTask(projectId, taskId);
+            if (task.status() != AgentTaskStatus.WAITING_CONFIRMATION) {
+                throw new BusinessException(AgentErrorCode.INVALID_STATE);
+            }
+            if (!LocalDateTime.now().isBefore(task.deadlineAt())) {
+                failTask(task, AgentErrorCode.TASK_TIMEOUT);
+                throw new BusinessException(AgentErrorCode.TASK_TIMEOUT);
+            }
             AgentConfirmation confirmation = repository.findConfirmation(taskId, task.currentStep())
                     .orElseThrow(() -> new BusinessException(
                             AgentErrorCode.CONFIRMATION_NOT_FOUND
                     ));
+            if (!confirmation.planHash().equals(request.planHash())) {
+                throw new BusinessException(AgentErrorCode.INVALID_STATE, "计划已变化，请刷新并重新审阅后确认");
+            }
             if (now.isAfter(confirmation.expiresAt())) {
                 repository.decideConfirmation(
                         confirmation.id(),
@@ -247,9 +278,7 @@ public class AgentTaskService {
                     AgentEventType.CONFIRMATION_DECIDED,
                     Map.of("approved", request.approved(), "note", safeMapValue(request.note()))
             );
-            if (request.approved()) {
-                taskExecutor.execute(() -> runner.resumeApproved(projectId, taskId));
-            } else {
+            if (!request.approved()) {
                 repository.requestCancel(taskId);
                 stateMachine.assertTransition(task.status(), AgentTaskStatus.CANCELLED);
                 repository.updateProgress(
@@ -272,10 +301,14 @@ public class AgentTaskService {
                 );
                 runtimeRegistry.remove(taskId);
             }
-            return get(projectId, taskId);
         } finally {
             repository.releaseLease(taskId, confirmOwner);
         }
+        // 必须先释放确认租约，再提交执行任务，避免工作线程领取失败后静默退出。
+        if (request.approved()) {
+            taskExecutor.execute(() -> runner.resumeApproved(projectId, taskId));
+        }
+        return get(projectId, taskId);
     }
 
     /**
@@ -319,50 +352,67 @@ public class AgentTaskService {
             if (currentTask.status() != AgentTaskStatus.WAITING_CONFIRMATION) {
                 throw new BusinessException(AgentErrorCode.INVALID_STATE);
             }
+            if (!LocalDateTime.now().isBefore(currentTask.deadlineAt())) {
+                failTask(currentTask, AgentErrorCode.TASK_TIMEOUT);
+                throw new BusinessException(AgentErrorCode.TASK_TIMEOUT);
+            }
             if (currentTask.modificationCount() >= properties.maxPlanModifications()) {
                 throw new BusinessException(AgentErrorCode.PLAN_MODIFICATION_LIMIT);
+            }
+            AgentConfirmation pending = repository.findConfirmation(taskId, currentTask.currentStep())
+                    .orElseThrow(() -> new BusinessException(AgentErrorCode.CONFIRMATION_NOT_FOUND));
+            if (pending.status() != ConfirmationStatus.PENDING) {
+                throw new BusinessException(AgentErrorCode.INVALID_STATE, "已决策计划不能继续修改");
+            }
+            if (currentTask.replanCount() > 0) {
+                throw new BusinessException(AgentErrorCode.INVALID_STATE, "执行过的任务暂不支持人工改写，请核验执行结果后新建任务");
             }
 
             List<ApiEndpoint> endpoints = openApiCatalogRepository.findEndpoints(projectId, null);
             String rawInstruction = limit(request.instruction().trim(), 2000);
-            Set<String> variableNames = runtimeRegistry.find(taskId)
-                    .map(rt -> rt.initialVariables() == null ? Set.<String>of() : rt.initialVariables().keySet())
-                    .orElse(Set.of());
+            AgentRuntimeRegistry.RuntimeContext runtime = runtimeRegistry.require(currentTask);
+            Set<String> variableNames = runtime.initialVariables().keySet();
 
             AgentModifyPlanContext context = new AgentModifyPlanContext(
                     taskId,
                     projectId,
-                    currentTask.goal(),
-                    currentTask.plan(),
+                    runtime.goal(),
+                    runtime.plan(),
                     rawInstruction,
                     endpoints,
                     variableNames
             );
 
             List<AgentPlanStep> revisedPlan = planner.modify(context);
-            if (revisedPlan == null || revisedPlan.isEmpty()) {
-                throw new BusinessException(AgentErrorCode.PLANNING_FAILED, "修改后的计划不能为空");
-            }
+            runner.validatePlan(revisedPlan);
 
             int nextCount = currentTask.modificationCount() + 1;
             String revisedPlanJson = toJson(revisedPlan);
-            boolean updated = repository.updateModifiedPlan(
-                    taskId,
-                    revisedPlanJson,
-                    currentTask.modificationCount(),
-                    nextCount
-            );
-            if (!updated) {
-                throw new BusinessException(AgentErrorCode.TASK_BUSY, "计划修改发生并发冲突，请重试");
-            }
-
             String newPlanHash = sha256(revisedPlanJson);
-            repository.refreshPendingConfirmation(
-                    taskId,
-                    currentTask.currentStep(),
-                    newPlanHash,
-                    now.plus(properties.confirmationTimeout())
-            );
+            int confirmationIndex = revisedPlan.stream().filter(AgentPlanStep::dangerous)
+                    .mapToInt(AgentPlanStep::index).findFirst().orElse(0);
+            AgentRuntimeRegistry.PreparedPlan prepared = runtimeRegistry.preparePlan(taskId, revisedPlan);
+            LocalDateTime expiresAt = LocalDateTime.now().plus(properties.confirmationTimeout());
+            if (expiresAt.isAfter(currentTask.deadlineAt())) {
+                expiresAt = currentTask.deadlineAt();
+            }
+            try {
+                com.fasterxml.jackson.databind.node.ObjectNode contextSummary =
+                        (com.fasterxml.jackson.databind.node.ObjectNode) objectMapper.readTree(currentTask.contextJsonRedacted());
+                contextSummary.put("runtimeContextRef", prepared.reference());
+                repository.revisePendingPlan(new com.dochelper.agent.domain.AgentPlanRevision(
+                        taskId, currentTask.modificationCount(), toSanitizedJson(revisedPlan),
+                        toSanitizedJson(contextSummary), confirmationIndex, toSanitizedJson(revisedPlan),
+                        newPlanHash, expiresAt
+                ));
+            } catch (JsonProcessingException exception) {
+                runtimeRegistry.discardPlan(prepared);
+                throw new IllegalStateException("任务上下文摘要损坏", exception);
+            } catch (RuntimeException exception) {
+                runtimeRegistry.discardPlan(prepared);
+                throw exception;
+            }
+            runtimeRegistry.activatePlan(taskId, prepared);
 
             appendEvent(
                     taskId,

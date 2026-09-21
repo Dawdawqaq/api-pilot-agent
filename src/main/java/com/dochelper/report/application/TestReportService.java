@@ -1,14 +1,19 @@
 package com.dochelper.report.application;
 
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.dochelper.agent.domain.AgentTask;
+import com.dochelper.agent.domain.AgentEventType;
+import com.dochelper.agent.domain.AgentTaskEvent;
 import com.dochelper.agent.domain.AgentToolCall;
 import com.dochelper.agent.domain.ToolCallStatus;
 import com.dochelper.agent.domain.repository.AgentTaskRepository;
@@ -69,6 +74,36 @@ public class TestReportService {
      * 幂等生成任务报告。
      */
     public AgentTestReport generate(Long projectId, Long taskId) {
+        return generateInternal(projectId, taskId, null, null, null);
+    }
+
+    /**
+     * 为失败或取消的任务幂等生成终态报告。
+     *
+     * @param projectId 项目标识
+     * @param taskId 任务标识
+     * @param terminalPhase 失败或取消前所处阶段
+     * @param errorCode 终态错误码
+     * @param errorMessage 终态错误信息
+     * @return 标准任务报告
+     */
+    public AgentTestReport generateTerminal(
+            Long projectId,
+            Long taskId,
+            String terminalPhase,
+            String errorCode,
+            String errorMessage
+    ) {
+        return generateInternal(projectId, taskId, terminalPhase, errorCode, errorMessage);
+    }
+
+    private AgentTestReport generateInternal(
+            Long projectId,
+            Long taskId,
+            String terminalPhase,
+            String terminalErrorCode,
+            String terminalErrorMessage
+    ) {
         TestReport existing = reportRepository.findByTaskId(taskId).orElse(null);
         if (existing != null) {
             return toToolReport(existing);
@@ -76,11 +111,16 @@ public class TestReportService {
         AgentTask task = taskRepository.findTask(projectId, taskId)
                 .orElseThrow(() -> new BusinessException(AgentErrorCode.TASK_NOT_FOUND));
         List<AgentToolCall> toolCalls = taskRepository.findToolCalls(taskId);
-        Long executionId = findExecutionId(toolCalls);
-        ExecutionAudit execution = executionRepository
-                .findByProjectAndId(projectId, executionId)
-                .orElseThrow(() -> new BusinessException(ReportErrorCode.EXECUTION_NOT_FOUND));
-        List<ExecutionStepAudit> executionSteps = executionRepository.findSteps(executionId);
+        Optional<Long> executionId = findExecutionId(toolCalls);
+        ExecutionAudit execution = executionId
+                .flatMap(id -> executionRepository.findByProjectAndId(projectId, id))
+                .orElse(null);
+        if (execution == null && terminalPhase == null) {
+            throw new BusinessException(ReportErrorCode.EXECUTION_NOT_FOUND);
+        }
+        List<ExecutionStepAudit> executionSteps = execution == null
+                ? List.of()
+                : executionRepository.findSteps(execution.id());
         int passed = (int) executionSteps.stream().filter(ExecutionStepAudit::success).count();
         int failed = executionSteps.size() - passed;
         int failedToolCalls = (int) toolCalls.stream()
@@ -88,28 +128,40 @@ public class TestReportService {
                         || call.status() == ToolCallStatus.REJECTED)
                 .count();
         int successfulToolCalls = toolCalls.size() - failedToolCalls;
-        List<String> citations = extractCitations(task.contextJsonRedacted());
+        PlanningEvidence planningEvidence = extractPlanningEvidence(taskId, task.contextJsonRedacted());
+        List<String> citations = planningEvidence.citations();
         LocalDateTime now = LocalDateTime.now();
         Long reportId = IdWorker.getId();
-        String summary = buildSummary(task, execution, executionSteps.size(), passed, failed);
-        CoverageSummary coverage = calculateCoverage(projectId, executionId);
+        String reportStatus = terminalPhase == null
+                ? execution.status().name()
+                : task.status().name();
+        String summary = buildSummary(
+                task, reportStatus, terminalPhase, terminalErrorCode, terminalErrorMessage,
+                executionSteps.size(), passed, failed
+        );
+        CoverageSummary coverage = execution == null
+                ? CoverageSummary.empty()
+                : calculateCoverage(projectId, execution.id());
         TestReport report = new TestReport(
                 reportId,
                 projectId,
                 taskId,
-                executionId,
+                executionId.orElse(null),
                 limit(task.goal(), 300),
-                execution.status().name(),
+                reportStatus,
                 summary,
                 executionSteps.size(),
                 passed,
                 failed,
                 toolCalls.size(),
-                execution.durationMs() == null ? 0 : execution.durationMs(),
+                execution == null || execution.durationMs() == null
+                        ? taskDuration(task)
+                        : execution.durationMs(),
                 citations,
                 toJson(buildMetrics(
                         executionSteps.size(), passed, toolCalls.size(), successfulToolCalls,
-                        failedToolCalls, task.replanCount(), citations.size(), coverage
+                        failedToolCalls, task.replanCount(), planningEvidence, coverage,
+                        terminalPhase, terminalErrorCode
                 )),
                 now
         );
@@ -117,14 +169,16 @@ public class TestReportService {
                 .map(step -> snapshot(reportId, step))
                 .toList();
         TestReport created = reportRepository.create(report, reportSteps);
-        contractResultRepository.saveCoverage(new TestRunCoverage(
-                IdWorker.getId(), projectId, created.id(), executionId,
-                coverage.operationTotal(), coverage.operationCovered(),
-                coverage.methodTotal(), coverage.methodCovered(),
-                coverage.statusTotal(), coverage.statusCovered(),
-                coverage.schemaTotal(), coverage.schemaCovered(),
-                coverage.uniqueServerErrors(), now
-        ));
+        if (execution != null) {
+            contractResultRepository.saveCoverage(new TestRunCoverage(
+                    IdWorker.getId(), projectId, created.id(), execution.id(),
+                    coverage.operationTotal(), coverage.operationCovered(),
+                    coverage.methodTotal(), coverage.methodCovered(),
+                    coverage.statusTotal(), coverage.statusCovered(),
+                    coverage.schemaTotal(), coverage.schemaCovered(),
+                    coverage.uniqueServerErrors(), now
+            ));
+        }
         return toToolReport(created);
     }
 
@@ -150,12 +204,22 @@ public class TestReportService {
     public String exportJUnit(Long projectId, Long reportId) {
         TestReport report = get(projectId, reportId);
         List<TestReportStep> steps = steps(projectId, reportId);
+        boolean terminalFailureWithoutStep = Set.of("FAILED", "NEEDS_REVIEW")
+                .contains(report.status()) && steps.isEmpty();
+        int exportedTests = report.totalSteps() + (terminalFailureWithoutStep ? 1 : 0);
+        int exportedFailures = report.failedSteps() + (terminalFailureWithoutStep ? 1 : 0);
         StringBuilder xml = new StringBuilder();
         xml.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
         xml.append("<testsuite name=\"").append(escapeXml(report.title()))
-                .append("\" tests=\"").append(report.totalSteps())
-                .append("\" failures=\"").append(report.failedSteps())
+                .append("\" tests=\"").append(exportedTests)
+                .append("\" failures=\"").append(exportedFailures)
                 .append("\" time=\"").append(report.durationMs() / 1000.0).append("\">\n");
+        if (terminalFailureWithoutStep) {
+            xml.append("  <testcase name=\"Agent planning\" classname=\"ApiPilot.Agent\" time=\"0\">")
+                    .append("<failure message=\"")
+                    .append(escapeXml(report.summary()))
+                    .append("\"/></testcase>\n");
+        }
         for (TestReportStep step : steps) {
             xml.append("  <testcase name=\"").append(escapeXml(step.stepName()))
                     .append("\" classname=\"ApiPilot.").append(escapeXml(step.httpMethod()))
@@ -179,14 +243,13 @@ public class TestReportService {
                 .replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;");
     }
 
-    private Long findExecutionId(List<AgentToolCall> calls) {
+    private Optional<Long> findExecutionId(List<AgentToolCall> calls) {
         return calls.stream()
                 .filter(call -> EXECUTE_TOOL.equals(call.toolName()))
                 .filter(call -> call.responseJsonRedacted() != null)
                 .reduce((first, second) -> second)
                 .map(this::executionId)
-                .filter(id -> id > 0)
-                .orElseThrow(() -> new BusinessException(ReportErrorCode.EXECUTION_NOT_FOUND));
+                .filter(id -> id > 0);
     }
 
     private Long executionId(AgentToolCall call) {
@@ -221,13 +284,22 @@ public class TestReportService {
 
     private String buildSummary(
             AgentTask task,
-            ExecutionAudit execution,
+            String status,
+            String terminalPhase,
+            String terminalErrorCode,
+            String terminalErrorMessage,
             int total,
             int passed,
             int failed
     ) {
-        return "任务“" + task.goal() + "”执行状态为 " + execution.status()
-                + "，共 " + total + " 个步骤，通过 " + passed + " 个，失败 " + failed + " 个";
+        String base = "任务“" + task.goal() + "”执行状态为 " + status
+                + "，共 " + total + " 个已执行步骤，通过 " + passed + " 个，失败 " + failed + " 个";
+        if (terminalPhase == null) {
+            return base;
+        }
+        return base + "；终止阶段 " + terminalPhase
+                + "，错误 " + safeText(terminalErrorCode, "UNKNOWN")
+                + "：" + safeText(terminalErrorMessage, "未知错误");
     }
 
     private Map<String, Object> buildMetrics(
@@ -237,8 +309,10 @@ public class TestReportService {
             int successfulToolCalls,
             int failedToolCalls,
             int replanCount,
-            int evidenceCount,
-            CoverageSummary coverage
+            PlanningEvidence planningEvidence,
+            CoverageSummary coverage,
+            String terminalPhase,
+            String terminalErrorCode
     ) {
         Map<String, Object> metrics = new java.util.LinkedHashMap<>();
         metrics.put("successRate", totalSteps == 0 ? 0.0 : (double) passedSteps / totalSteps);
@@ -246,7 +320,14 @@ public class TestReportService {
         metrics.put("successfulToolCalls", successfulToolCalls);
         metrics.put("failedToolCalls", failedToolCalls);
         metrics.put("replanCount", replanCount);
-        metrics.put("evidenceCount", evidenceCount);
+        metrics.put("evidenceCount", planningEvidence.citations().size());
+        metrics.put("openApiCandidateCount", planningEvidence.openApiCandidateCount());
+        metrics.put("schemaCount", planningEvidence.schemaCount());
+        metrics.put("documentEvidenceCount", planningEvidence.documentEvidenceCount());
+        if (terminalPhase != null) {
+            metrics.put("terminalPhase", terminalPhase);
+            metrics.put("errorCode", safeText(terminalErrorCode, "UNKNOWN"));
+        }
         metrics.put("operationCoverage", coverage.operationRate());
         metrics.put("methodCoverage", coverage.methodRate());
         metrics.put("statusCodeCoverage", coverage.statusRate());
@@ -302,6 +383,10 @@ public class TestReportService {
             int schemaCovered,
             int uniqueServerErrors
     ) {
+        private static CoverageSummary empty() {
+            return new CoverageSummary(0, 0, 0, 0, 0, 0, 0, 0, 0);
+        }
+
         private double operationRate() { return rate(operationCovered, operationTotal); }
         private double methodRate() { return rate(methodCovered, methodTotal); }
         private double statusRate() { return rate(statusCovered, statusTotal); }
@@ -309,23 +394,81 @@ public class TestReportService {
         private double rate(int covered, int total) { return total == 0 ? 0.0 : (double) covered / total; }
     }
 
-    private List<String> extractCitations(String contextJson) {
-        if (contextJson == null || contextJson.isBlank()) {
-            return List.of();
-        }
-        try {
-            JsonNode citations = objectMapper.readTree(contextJson).path("citations");
-            if (!citations.isArray()) {
-                return List.of();
+    private PlanningEvidence extractPlanningEvidence(Long taskId, String contextJson) {
+        java.util.LinkedHashSet<String> citations = new java.util.LinkedHashSet<>();
+        int openApiCandidateCount = 0;
+        int schemaCount = 0;
+        int documentEvidenceCount = 0;
+
+        if (contextJson != null && !contextJson.isBlank()) {
+            try {
+                JsonNode contextCitations = objectMapper.readTree(contextJson).path("citations");
+                if (contextCitations.isArray()) {
+                    contextCitations.forEach(value -> {
+                        if (!value.asText().isBlank()) {
+                            citations.add(value.asText());
+                        }
+                    });
+                }
+            } catch (JsonProcessingException exception) {
+                throw new IllegalStateException("Agent 上下文 JSON 数据损坏", exception);
             }
-            return java.util.stream.StreamSupport.stream(citations.spliterator(), false)
-                    .map(JsonNode::asText)
-                    .filter(value -> !value.isBlank())
-                    .distinct()
-                    .toList();
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Agent 上下文 JSON 数据损坏", exception);
         }
+
+        for (AgentTaskEvent event : taskRepository.findEvents(taskId, 0, 500)) {
+            try {
+                JsonNode payload = objectMapper.readTree(event.payloadJson());
+                if (event.eventType() == AgentEventType.OPENAPI_CANDIDATES_SELECTED) {
+                    openApiCandidateCount = payload.path("candidateCount").asInt();
+                    JsonNode candidates = payload.path("candidates");
+                    if (candidates.isArray()) {
+                        candidates.forEach(candidate -> citations.add(
+                                "OpenAPI " + candidate.path("method").asText("HTTP")
+                                        + " " + candidate.path("path").asText("未知路径")
+                                        + " · " + candidate.path("summary").asText("未填写摘要")
+                                        + " · score=" + candidate.path("score").asInt()
+                        ));
+                    }
+                } else if (event.eventType() == AgentEventType.SCHEMA_CONTEXT_READY) {
+                    schemaCount = payload.path("schemaCount").asInt();
+                } else if (event.eventType() == AgentEventType.DOCUMENT_EVIDENCE_RETRIEVED
+                        || event.eventType() == AgentEventType.RETRIEVAL_COMPLETED) {
+                    documentEvidenceCount = payload.path("resultCount").asInt();
+                    JsonNode documentCitations = payload.path("citations");
+                    if (documentCitations.isArray()) {
+                        documentCitations.forEach(value -> {
+                            if (!value.asText().isBlank()) {
+                                citations.add(value.asText());
+                            }
+                        });
+                    }
+                }
+            } catch (JsonProcessingException exception) {
+                throw new IllegalStateException("Agent 事件 JSON 数据损坏", exception);
+            }
+        }
+        return new PlanningEvidence(
+                List.copyOf(citations), openApiCandidateCount, schemaCount, documentEvidenceCount
+        );
+    }
+
+    private long taskDuration(AgentTask task) {
+        if (task.startedAt() == null || task.completedAt() == null) {
+            return 0;
+        }
+        return Math.max(0, Duration.between(task.startedAt(), task.completedAt()).toMillis());
+    }
+
+    private String safeText(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private record PlanningEvidence(
+            List<String> citations,
+            int openApiCandidateCount,
+            int schemaCount,
+            int documentEvidenceCount
+    ) {
     }
 
     private AgentTestReport toToolReport(TestReport report) {

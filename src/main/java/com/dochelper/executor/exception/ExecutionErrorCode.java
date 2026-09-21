@@ -17,6 +17,7 @@ public enum ExecutionErrorCode implements ErrorCode {
             HttpStatus.CONFLICT
     ),
     WRITE_CONFIRMATION_REQUIRED("EXECUTOR_409_002", "写操作必须经过人工确认", HttpStatus.CONFLICT),
+    WRITE_RESULT_REQUIRES_REVIEW("EXECUTOR_409_003", "写操作可能已经生效，需要核验远端结果，禁止自动重放", HttpStatus.CONFLICT),
     ENDPOINT_NOT_IN_CATALOG("EXECUTOR_403_003", "请求接口不在当前 OpenAPI 目录", HttpStatus.FORBIDDEN),
     ENDPOINT_METHOD_MISMATCH("EXECUTOR_403_004", "请求方法与 OpenAPI 目录不一致", HttpStatus.FORBIDDEN),
     TARGET_BLOCKED("EXECUTOR_403_002", "目标地址被 SSRF 安全策略拒绝", HttpStatus.FORBIDDEN),

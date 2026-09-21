@@ -110,11 +110,6 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- Redis 用于缓存、任务状态与幂等控制 -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-redis</artifactId>
-        </dependency>
 
         <!-- MinIO Java SDK 提供 S3 兼容对象存储访问 -->
         <dependency>

@@ -7,6 +7,8 @@ import org.springframework.http.HttpStatus;
  * Agent 模块稳定错误码。
  */
 public enum AgentErrorCode implements ErrorCode {
+    TASK_CANCELLED("AGENT_CANCELLED", "用户取消任务，已停止后续步骤；已发出的请求不能撤回", HttpStatus.CONFLICT),
+    RECOVERY_UNAVAILABLE("AGENT_409_005", "任务上下文无法安全恢复，请核验已执行结果后新建任务", HttpStatus.CONFLICT),
     TASK_NOT_FOUND("AGENT_404_001", "Agent 任务不存在", HttpStatus.NOT_FOUND),
     INVALID_TASK("AGENT_400_001", "Agent 任务参数不合法", HttpStatus.BAD_REQUEST),
     INVALID_PLAN("AGENT_400_002", "Agent 执行计划不合法", HttpStatus.BAD_REQUEST),
@@ -15,6 +17,7 @@ public enum AgentErrorCode implements ErrorCode {
     CONFIRMATION_EXPIRED("AGENT_409_002", "危险操作确认已过期", HttpStatus.CONFLICT),
     TOOL_CALL_LIMIT("AGENT_429_001", "Agent 工具调用次数达到上限", HttpStatus.TOO_MANY_REQUESTS),
     PLAN_MODIFICATION_LIMIT("AGENT_429_002", "任务计划修改轮次已达上限", HttpStatus.TOO_MANY_REQUESTS),
+    TASK_CAPACITY_EXCEEDED("AGENT_429_003", "当前运行任务已达到容量上限，请等待现有任务结束", HttpStatus.TOO_MANY_REQUESTS),
     TASK_TIMEOUT("AGENT_408_001", "Agent 任务执行超时", HttpStatus.REQUEST_TIMEOUT),
     DUPLICATE_TOOL_CALL("AGENT_409_003", "检测到重复工具调用", HttpStatus.CONFLICT),
     TASK_BUSY("AGENT_409_004", "任务正在处理或修改中，请稍后重试", HttpStatus.CONFLICT),

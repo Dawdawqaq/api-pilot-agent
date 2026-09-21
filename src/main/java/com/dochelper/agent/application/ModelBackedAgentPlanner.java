@@ -42,6 +42,7 @@ public class ModelBackedAgentPlanner implements AgentPlanner {
     private final ModelProviderProperties modelProperties;
     private final ModelDataPolicyService modelDataPolicyService;
     private final AgentProperties agentProperties;
+    private final PlanningSchemaResolver schemaResolver;
 
     public ModelBackedAgentPlanner(
             ChatModel chatModel,
@@ -50,7 +51,8 @@ public class ModelBackedAgentPlanner implements AgentPlanner {
             AgentTaskRepository repository,
             ModelProviderProperties modelProperties,
             ModelDataPolicyService modelDataPolicyService,
-            AgentProperties agentProperties
+            AgentProperties agentProperties,
+            PlanningSchemaResolver schemaResolver
     ) {
         this.chatModel = chatModel;
         this.objectMapper = objectMapper;
@@ -59,6 +61,7 @@ public class ModelBackedAgentPlanner implements AgentPlanner {
         this.modelProperties = modelProperties;
         this.modelDataPolicyService = modelDataPolicyService;
         this.agentProperties = agentProperties;
+        this.schemaResolver = schemaResolver;
     }
 
     @Override
@@ -130,6 +133,10 @@ public class ModelBackedAgentPlanner implements AgentPlanner {
                        FIELD_TYPE、FIELD_EQUALS、FIELD_CONTAINS。验证字段不存在时
                        必须使用 FIELD_NOT_EXISTS，不要给 FIELD_EXISTS 传 false。
                     5. 不要把密码或令牌明文写入计划。
+                    6. extractors 的变量名不得覆盖初始变量或前面步骤的变量；字段路径必须以提供的 Schema 为依据。
+                    7. 候选接口已经按目标相关度排序。选择接口时同时核对核心业务名词和操作形态；
+                       通用列表目标优先选择无路径变量的 GET 接口，不要用“收藏”“我的”“管理”等
+                       限定子资源替代用户没有要求的通用资源。
                     """.formatted(
                     context.goal(),
                     objectMapper.writeValueAsString(context.initialVariableNames()),
@@ -137,7 +144,7 @@ public class ModelBackedAgentPlanner implements AgentPlanner {
                             modelDataPolicyService.outboundEvidence(policy, context.evidence())
                     ),
                     objectMapper.writeValueAsString(
-                            modelDataPolicyService.outboundEndpoints(policy, context.endpoints())
+                            endpointContext(policy, context.endpoints())
                     )
             );
             if (basePrompt.length() > policy.promptCharacterBudget()) {
@@ -202,7 +209,7 @@ public class ModelBackedAgentPlanner implements AgentPlanner {
                     context.modificationInstruction(),
                     objectMapper.writeValueAsString(context.initialVariableNames()),
                     objectMapper.writeValueAsString(
-                            modelDataPolicyService.outboundEndpoints(policy, context.endpoints())
+                            endpointContext(policy, context.endpoints())
                     )
             );
             if (basePrompt.length() > policy.promptCharacterBudget()) {
@@ -323,6 +330,8 @@ public class ModelBackedAgentPlanner implements AgentPlanner {
                     失败代码：%s
                     失败说明：%s
                     只允许修改未完成步骤，不得新增接口目录外路径；输出仍须为完整计划。
+                    不得更改任何步骤的接口路径、HTTP 方法或原有断言；不能通过删除断言或修改预期值使测试通过。
+                    保留所有原有 extractor 的名称及顺序，只能修正其 jsonPath，不得删除失败提取器来掩盖错误。
                     """.formatted(
                     context.originalGoal(),
                     objectMapper.writeValueAsString(context.completedSteps()),
@@ -337,6 +346,17 @@ public class ModelBackedAgentPlanner implements AgentPlanner {
                 context.taskId(), context.projectId(), constrainedGoal, List.of(),
                 context.remainingEndpoints(), context.availableVariableNames(), List.of()
         ));
+    }
+
+    private java.util.Map<String, Object> endpointContext(
+            ProjectModelPolicy policy, List<com.dochelper.openapi.domain.ApiEndpoint> endpoints
+    ) {
+        var outbound = modelDataPolicyService.outboundEndpoints(policy, endpoints);
+        return java.util.Map.of(
+                "endpoints", outbound,
+                "schemasByImportAndReference", policy.allowSchemaContent()
+                        ? schemaResolver.collect(outbound) : java.util.Map.of()
+        );
     }
 
     private void saveModelCall(

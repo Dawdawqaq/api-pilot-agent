@@ -4,6 +4,8 @@ target/
 .env
 logs/
 output/
+__pycache__/
+*.pyc
 .playwright-cli/
 .local-notes/
 .agents/
@@ -12,5 +14,4 @@ Thumbs.db
 .DS_Store
 _Run_*.*
 _run_*.*
-
 

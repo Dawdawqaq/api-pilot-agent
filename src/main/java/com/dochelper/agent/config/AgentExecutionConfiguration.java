@@ -17,11 +17,11 @@ public class AgentExecutionConfiguration {
      * @return Agent 任务执行器
      */
     @Bean("agentTaskExecutor")
-    TaskExecutor agentTaskExecutor() {
+    TaskExecutor agentTaskExecutor(AgentProperties properties) {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(2);
-        executor.setMaxPoolSize(4);
-        executor.setQueueCapacity(100);
+        executor.setCorePoolSize(Math.min(2, properties.maxConcurrentTasks()));
+        executor.setMaxPoolSize(properties.maxConcurrentTasks());
+        executor.setQueueCapacity(properties.taskQueueCapacity());
         executor.setThreadNamePrefix("agent-task-");
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(10);

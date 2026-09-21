@@ -62,6 +62,11 @@ body {
         var(--paper);
 }
 
+:focus-visible {
+    outline: 3px solid rgba(128, 157, 22, .42);
+    outline-offset: 3px;
+}
+
 button,
 input,
 textarea,
@@ -222,6 +227,8 @@ button {
 }
 
 .main-area {
+    width: calc(100% - 238px);
+    min-width: 0;
     min-height: 100vh;
     margin-left: 238px;
     padding: 0 36px 50px;
@@ -427,6 +434,15 @@ button {
     box-shadow: none;
 }
 
+button:disabled,
+input:disabled,
+textarea:disabled,
+select:disabled {
+    cursor: not-allowed;
+    opacity: .58;
+    transform: none !important;
+}
+
 .secondary-button {
     color: var(--forest);
     border: 1px solid #b8c0b9;
@@ -603,11 +619,15 @@ button {
 
 .compact-item {
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     gap: 12px;
     padding: 15px 22px;
     border-bottom: 1px solid #ecece7;
+}
+
+.compact-item > div {
+    min-width: 0;
 }
 
 .compact-item:last-child {
@@ -1092,6 +1112,13 @@ select:focus {
     align-items: start;
 }
 
+.agent-layout > *,
+.report-layout > *,
+.two-column > *,
+.topbar > * {
+    min-width: 0;
+}
+
 .composer-panel,
 .plan-panel,
 .trace-panel {
@@ -1248,10 +1275,34 @@ select:focus {
     line-height: 1.6;
 }
 
+.advanced-content {
+    display: grid;
+    gap: 14px;
+    padding: 0 12px 12px;
+}
+
+.advanced-content label > span,
+.advanced-content label > small {
+    display: block;
+}
+
+.advanced-content label > span {
+    color: #4b5752;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .05em;
+}
+
+.advanced-content label > small {
+    margin: 5px 0 8px;
+    color: var(--muted);
+    font-size: 9px;
+    line-height: 1.55;
+}
+
 .advanced-box textarea {
-    border: 0;
-    border-top: 1px solid var(--line);
-    border-radius: 0 0 11px 11px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
     font-family: Consolas, monospace;
     font-size: 10px;
 }
@@ -1515,6 +1566,7 @@ select:focus {
     font-size: 11px;
     line-height: 1.55;
     background: #fff3f0;
+    white-space: pre-line;
 }
 
 .confirmation-box {
@@ -1550,6 +1602,25 @@ select:focus {
     margin: 5px 0 0;
     color: #81504a;
     font-size: 10px;
+}
+
+.confirmation-detail-grid {
+    display: grid;
+    gap: 5px;
+    margin-top: 10px;
+}
+
+.confirmation-detail-grid code {
+    overflow-wrap: anywhere;
+    color: #582d28;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.confirmation-detail-grid small {
+    color: #81504a;
+    font-size: 9px;
+    font-variant-numeric: tabular-nums;
 }
 
 .confirmation-actions {
@@ -1819,6 +1890,31 @@ select:focus {
     font-size: 9px;
 }
 
+.report-failure-context {
+    margin: 18px 0;
+    padding: 14px;
+    color: #7d211b;
+    border: 1px solid #efb3aa;
+    border-radius: 10px;
+    background: #fff3f0;
+}
+
+.report-failure-context strong,
+.report-failure-context p,
+.report-failure-context small {
+    display: block;
+}
+
+.report-failure-context p {
+    margin: 7px 0;
+    font-size: 10px;
+}
+
+.report-failure-context small {
+    color: #81504a;
+    font-size: 9px;
+}
+
 .report-steps {
     display: grid;
     gap: 10px;
@@ -1941,7 +2037,7 @@ pre {
 
 @media (max-width: 1250px) {
     .agent-layout {
-        grid-template-columns: .85fr 1.15fr;
+        grid-template-columns: minmax(270px, .85fr) minmax(0, 1.15fr);
     }
 
     .trace-panel {
@@ -1965,6 +2061,7 @@ pre {
     }
 
     .main-area {
+        width: 100%;
         margin-left: 0;
         padding: 0 20px 35px;
     }
@@ -2018,14 +2115,16 @@ pre {
 
     .topbar {
         align-items: flex-start;
+        flex-direction: column;
         gap: 12px;
     }
 
     .topbar-actions {
-        width: 55%;
+        width: 100%;
     }
 
     .project-picker {
+        flex: 1;
         min-width: 0;
     }
 
@@ -2092,6 +2191,17 @@ pre {
         flex: none;
         padding-inline: 12px;
         white-space: nowrap;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        scroll-behavior: auto !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
     }
 }
 
@@ -2286,4 +2396,3 @@ pre {
         transform: translateY(0);
     }
 }
-

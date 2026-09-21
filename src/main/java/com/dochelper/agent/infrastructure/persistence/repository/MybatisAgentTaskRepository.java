@@ -44,6 +44,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Repository
 public class MybatisAgentTaskRepository implements AgentTaskRepository {
 
+    private static final String ACTIVE_PROJECT_EXISTS_SQL =
+            "EXISTS (SELECT 1 FROM api_project p WHERE p.id = agent_task.project_id AND p.deleted = 0)";
+
     private final AgentConversationMapper conversationMapper;
     private final AgentTaskMapper taskMapper;
     private final AgentTaskEventMapper eventMapper;
@@ -137,13 +140,31 @@ public class MybatisAgentTaskRepository implements AgentTaskRepository {
     }
 
     @Override
+    public long countActiveTasks() {
+        return taskMapper.selectCount(Wrappers.<AgentTaskEntity>lambdaQuery()
+                .apply(ACTIVE_PROJECT_EXISTS_SQL)
+                .notIn(AgentTaskEntity::getStatus, terminalStatuses()));
+    }
+
+    @Override
+    public long countActiveTasks(Long projectId) {
+        return taskMapper.selectCount(Wrappers.<AgentTaskEntity>lambdaQuery()
+                .eq(AgentTaskEntity::getProjectId, projectId)
+                .apply(ACTIVE_PROJECT_EXISTS_SQL)
+                .notIn(AgentTaskEntity::getStatus, terminalStatuses()));
+    }
+
+    @Override
     public List<AgentTask> findRecoverableTasks(LocalDateTime now, int limit) {
-        List<String> terminal = List.of(
-                AgentTaskStatus.SUCCEEDED.name(), AgentTaskStatus.FAILED.name(),
-                AgentTaskStatus.CANCELLED.name()
-        );
         return taskMapper.selectList(Wrappers.<AgentTaskEntity>lambdaQuery()
-                        .notIn(AgentTaskEntity::getStatus, terminal)
+                        .apply(ACTIVE_PROJECT_EXISTS_SQL)
+                        .notIn(AgentTaskEntity::getStatus, terminalStatuses())
+                        // 未到期的待确认任务由确认入口按需恢复，避免占满恢复批次。
+                        .and(wrapper -> wrapper.ne(AgentTaskEntity::getStatus, AgentTaskStatus.WAITING_CONFIRMATION.name())
+                                .or().le(AgentTaskEntity::getDeadlineAt, now)
+                                .or().apply("EXISTS (SELECT 1 FROM agent_confirmation c WHERE c.task_id = agent_task.id "
+                                        + "AND c.id = (SELECT MAX(c2.id) FROM agent_confirmation c2 WHERE c2.task_id = agent_task.id) "
+                                        + "AND (c.status = 'APPROVED' OR (c.status = 'PENDING' AND c.expires_at <= {0})))", now))
                         .and(wrapper -> wrapper.isNull(AgentTaskEntity::getLeaseUntil)
                                 .or().lt(AgentTaskEntity::getLeaseUntil, now))
                         .orderByAsc(AgentTaskEntity::getUpdatedAt)
@@ -160,6 +181,8 @@ public class MybatisAgentTaskRepository implements AgentTaskRepository {
     ) {
         return taskMapper.update(null, Wrappers.<AgentTaskEntity>lambdaUpdate()
                 .eq(AgentTaskEntity::getId, taskId)
+                .apply(ACTIVE_PROJECT_EXISTS_SQL)
+                .notIn(AgentTaskEntity::getStatus, terminalStatuses())
                 .and(wrapper -> wrapper.isNull(AgentTaskEntity::getLeaseUntil)
                         .or().lt(AgentTaskEntity::getLeaseUntil, now)
                         .or().eq(AgentTaskEntity::getLeaseOwner, owner))
@@ -218,7 +241,10 @@ public class MybatisAgentTaskRepository implements AgentTaskRepository {
         entity.setErrorMessage(errorMessage);
         entity.setStartedAt(startedAt);
         entity.setCompletedAt(completedAt);
-        taskMapper.updateById(entity);
+        // 终态不可被迟到的工作线程覆盖；取消与报告完成竞争时保留先落库的终态。
+        taskMapper.update(entity, Wrappers.<AgentTaskEntity>lambdaUpdate()
+                .eq(AgentTaskEntity::getId, taskId)
+                .notIn(AgentTaskEntity::getStatus, terminalStatuses()));
     }
 
     @Override
@@ -278,9 +304,21 @@ public class MybatisAgentTaskRepository implements AgentTaskRepository {
         return toolCallMapper.selectList(
                 Wrappers.<AgentToolCallEntity>lambdaQuery()
                         .eq(AgentToolCallEntity::getTaskId, taskId)
-                        .orderByAsc(AgentToolCallEntity::getStepIndex)
-                        .orderByAsc(AgentToolCallEntity::getAttempt)
+                        // 重规划会重新使用步骤编号，执行轨迹必须按实际发生时间展示。
+                        .orderByAsc(AgentToolCallEntity::getCreatedAt)
+                        .orderByAsc(AgentToolCallEntity::getId)
         ).stream().map(this::toDomain).toList();
+    }
+
+    @Override
+    public void interruptRunningToolCalls(Long taskId, LocalDateTime now) {
+        toolCallMapper.update(null, Wrappers.<AgentToolCallEntity>lambdaUpdate()
+                .eq(AgentToolCallEntity::getTaskId, taskId)
+                .eq(AgentToolCallEntity::getStatus, "RUNNING")
+                .set(AgentToolCallEntity::getStatus, "FAILED")
+                .set(AgentToolCallEntity::getErrorCode, "AGENT_INTERRUPTED")
+                .set(AgentToolCallEntity::getErrorMessage, "执行进程中断，后续恢复以步骤审计为准")
+                .set(AgentToolCallEntity::getCompletedAt, now));
     }
 
     @Override
@@ -307,7 +345,8 @@ public class MybatisAgentTaskRepository implements AgentTaskRepository {
         return modelCallMapper.selectList(
                 Wrappers.<AgentModelCallEntity>lambdaQuery()
                         .eq(AgentModelCallEntity::getTaskId, taskId)
-                        .orderByAsc(AgentModelCallEntity::getAttempt)
+                        .orderByAsc(AgentModelCallEntity::getCreatedAt)
+                        .orderByAsc(AgentModelCallEntity::getId)
         ).stream().map(this::toDomain).toList();
     }
 
@@ -351,38 +390,40 @@ public class MybatisAgentTaskRepository implements AgentTaskRepository {
     }
 
     @Override
-    public boolean updateModifiedPlan(
-            Long taskId,
-            String planJson,
-            int expectedModificationCount,
-            int nextModificationCount
-    ) {
-        return taskMapper.update(
+    @org.springframework.transaction.annotation.Transactional
+    public void revisePendingPlan(com.dochelper.agent.domain.AgentPlanRevision revision) {
+        int updated = taskMapper.update(
                 null,
                 Wrappers.<AgentTaskEntity>lambdaUpdate()
-                        .eq(AgentTaskEntity::getId, taskId)
-                        .eq(AgentTaskEntity::getModificationCount, expectedModificationCount)
-                        .set(AgentTaskEntity::getPlanJson, planJson)
-                        .set(AgentTaskEntity::getModificationCount, nextModificationCount)
-        ) == 1;
-    }
-
-    @Override
-    public boolean refreshPendingConfirmation(
-            Long taskId,
-            int stepIndex,
-            String newPlanHash,
-            LocalDateTime expiresAt
-    ) {
-        return confirmationMapper.update(
+                        .eq(AgentTaskEntity::getId, revision.taskId())
+                        .eq(AgentTaskEntity::getStatus, AgentTaskStatus.WAITING_CONFIRMATION.name())
+                        .eq(AgentTaskEntity::getModificationCount, revision.expectedModificationCount())
+                        .set(AgentTaskEntity::getPlanJson, revision.planJsonRedacted())
+                        .set(AgentTaskEntity::getContextJsonRedacted, revision.contextJsonRedacted())
+                        .set(AgentTaskEntity::getCurrentStep, revision.confirmationStepIndex())
+                        .set(AgentTaskEntity::getModificationCount, revision.expectedModificationCount() + 1)
+        );
+        if (updated != 1) {
+            throw new com.dochelper.common.exception.BusinessException(
+                    com.dochelper.agent.exception.AgentErrorCode.TASK_BUSY, "计划修订状态已变化，请刷新任务"
+            );
+        }
+        int refreshed = confirmationMapper.update(
                 null,
                 Wrappers.<AgentConfirmationEntity>lambdaUpdate()
-                        .eq(AgentConfirmationEntity::getTaskId, taskId)
-                        .eq(AgentConfirmationEntity::getStepIndex, stepIndex)
+                        .eq(AgentConfirmationEntity::getTaskId, revision.taskId())
                         .eq(AgentConfirmationEntity::getStatus, ConfirmationStatus.PENDING.name())
-                        .set(AgentConfirmationEntity::getPlanHash, newPlanHash)
-                        .set(AgentConfirmationEntity::getExpiresAt, expiresAt)
-        ) == 1;
+                        .set(AgentConfirmationEntity::getStepIndex, revision.confirmationStepIndex())
+                        .set(AgentConfirmationEntity::getRequestJson, revision.confirmationJsonRedacted())
+                        .set(AgentConfirmationEntity::getPlanHash, revision.planHash())
+                        .set(AgentConfirmationEntity::getExpiresAt, revision.expiresAt())
+        );
+        if (refreshed != 1) {
+            // 抛出异常回滚同一事务中的计划修改，避免计划与授权版本分离。
+            throw new com.dochelper.common.exception.BusinessException(
+                    com.dochelper.agent.exception.AgentErrorCode.INVALID_STATE, "待确认记录已失效，请刷新任务"
+            );
+        }
     }
 
     private AgentTaskEntity toEntity(AgentTask value) {
@@ -411,6 +452,15 @@ public class MybatisAgentTaskRepository implements AgentTaskRepository {
         entity.setCompletedAt(value.completedAt());
         entity.setUpdatedAt(value.updatedAt());
         return entity;
+    }
+
+    private List<String> terminalStatuses() {
+        return List.of(
+                AgentTaskStatus.SUCCEEDED.name(),
+                AgentTaskStatus.NEEDS_REVIEW.name(),
+                AgentTaskStatus.FAILED.name(),
+                AgentTaskStatus.CANCELLED.name()
+        );
     }
 
     private AgentToolCallEntity toEntity(AgentToolCall value) {

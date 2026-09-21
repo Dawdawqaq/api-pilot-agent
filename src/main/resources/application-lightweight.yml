@@ -1,0 +1,13 @@
+# 核心模式只需要 MySQL 和真实 Chat 模型；禁用知识库不等于模拟向量检索。
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.vectorstore.qdrant.autoconfigure.QdrantVectorStoreAutoConfiguration
+
+dochelper:
+  knowledge:
+    enabled: false
+  storage:
+    enabled: false
+  infrastructure:
+    qdrant-health-enabled: false

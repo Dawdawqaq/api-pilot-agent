@@ -5,6 +5,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -15,15 +17,15 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.dochelper.DocHelperApplication;
 import com.dochelper.agent.domain.repository.AgentTaskRepository;
-import com.dochelper.infrastructure.redis.NamespacedRedisKeyFactory;
 import com.dochelper.infrastructure.storage.ObjectStorageGateway;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.ClassPathResource;
-import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -127,11 +129,7 @@ class PublicInfrastructureIT {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    @Autowired
-    private StringRedisTemplate redisTemplate;
 
-    @Autowired
-    private NamespacedRedisKeyFactory redisKeyFactory;
 
     @Autowired
     private ObjectStorageGateway objectStorageGateway;
@@ -139,8 +137,29 @@ class PublicInfrastructureIT {
     @Autowired
     private AgentTaskRepository agentTaskRepository;
 
+    private final List<Long> createdProjectIds = new ArrayList<>();
+
     /**
-     * 验证 MySQL、Redis、MinIO 和系统接口均使用 DocHelper 独立资源。
+     * 清理本用例创建的数据，避免公共开发库中的测试记录进入实际页面。
+     */
+    @AfterEach
+    void cleanUpCreatedData() {
+        WebTestClient client = authenticatedClient();
+        for (int index = createdProjectIds.size() - 1; index >= 0; index--) {
+            client.delete()
+                    .uri("/api/v1/projects/{projectId}", createdProjectIds.get(index))
+                    .exchange()
+                    .expectBody()
+                    .returnResult();
+        }
+        jdbcTemplate.update(
+                "DELETE FROM quality_evaluation_run WHERE dataset_version LIKE 'integration-%'"
+        );
+        createdProjectIds.clear();
+    }
+
+    /**
+     * 验证 MySQL、MinIO 和系统接口均使用 DocHelper 独立资源。
      *
      * @throws Exception MinIO 访问异常
      */
@@ -149,13 +168,6 @@ class PublicInfrastructureIT {
         String databaseName = jdbcTemplate.queryForObject("SELECT DATABASE()", String.class);
         assertThat(databaseName).isEqualTo("dochelper");
 
-        String redisKey = redisKeyFactory.create("stage1:integration-probe");
-        try {
-            redisTemplate.opsForValue().set(redisKey, "ok", Duration.ofSeconds(30));
-            assertThat(redisTemplate.opsForValue().get(redisKey)).isEqualTo("ok");
-        } finally {
-            redisTemplate.delete(redisKey);
-        }
 
         assertThat(objectStorageGateway.bucketName()).isEqualTo("dochelper-files");
         assertThat(objectStorageGateway.bucketExists()).isTrue();
@@ -170,14 +182,13 @@ class PublicInfrastructureIT {
                 .expectHeader().exists("X-Request-Id")
                 .expectBody()
                 .jsonPath("$.code").isEqualTo("SUCCESS")
-                .jsonPath("$.data.schemaVersion").isEqualTo("14")
-                .jsonPath("$.data.redisNamespace").isEqualTo("dochelper:")
+                .jsonPath("$.data.schemaVersion").isEqualTo("16")
                 .jsonPath("$.data.qdrantCollection").isEqualTo("dochelper_knowledge")
                 .jsonPath("$.data.objectStorageBucket").isEqualTo("dochelper-files");
     }
 
     /**
-     * 验证 Actuator 能汇总四类公共设施的健康状态。
+     * 验证 Actuator 能汇总实际依赖设施的健康状态。
      */
     @Test
     void shouldExposeInfrastructureHealth() {
@@ -191,7 +202,6 @@ class PublicInfrastructureIT {
                 .expectBody()
                 .jsonPath("$.status").isEqualTo("UP")
                 .jsonPath("$.components.db.status").isEqualTo("UP")
-                .jsonPath("$.components.redis.status").isEqualTo("UP")
                 .jsonPath("$.components.qdrant.status").isEqualTo("UP")
                 .jsonPath("$.components.minio.status").isEqualTo("UP");
     }
@@ -305,7 +315,7 @@ class PublicInfrastructureIT {
                             id, project_id, environment_id, conversation_id, goal, status,
                             current_step, max_steps, tool_call_count, replan_count,
                             plan_json, context_json_redacted, cancel_requested, lock_version, deadline_at
-                        ) VALUES (?, ?, ?, ?, '验证租约互斥', 'FAILED', 0, 1, 0, 0, '[]', '{}', 0, 0, ?)
+                        ) VALUES (?, ?, ?, ?, '验证租约互斥', 'RECEIVED', 0, 1, 0, 0, '[]', '{}', 0, 0, ?)
                         """,
                 taskId,
                 projectId,
@@ -344,6 +354,20 @@ class PublicInfrastructureIT {
                     LocalDateTime.now(),
                     LocalDateTime.now().plusSeconds(30)
             )).isTrue();
+            agentTaskRepository.releaseLease(taskId, "instance-after-release");
+
+            owner.delete()
+                    .uri("/api/v1/projects/{projectId}", projectId)
+                    .exchange()
+                    .expectStatus().isOk();
+            assertThat(agentTaskRepository.tryAcquireLease(
+                    taskId,
+                    "instance-after-project-deleted",
+                    LocalDateTime.now(),
+                    LocalDateTime.now().plusSeconds(30)
+            )).isFalse();
+            assertThat(agentTaskRepository.findRecoverableTasks(LocalDateTime.now(), 100))
+                    .noneMatch(task -> task.id().equals(taskId));
         }
     }
 
@@ -361,7 +385,7 @@ class PublicInfrastructureIT {
                 .bodyValue("""
                         {
                           "code": "%s",
-                          "name": "JApiServer",
+                          "name": "[E2E_TEST] JApiServer",
                           "description": "阶段 2 集成测试"
                         }
                         """.formatted(projectCode))
@@ -372,6 +396,7 @@ class PublicInfrastructureIT {
                 .getResponseBody();
         assertThat(project).isNotNull();
         long projectId = project.path("data").path("id").asLong();
+        createdProjectIds.add(projectId);
 
         client.post()
                 .uri("/api/v1/projects/{projectId}/environments", projectId)
@@ -498,7 +523,7 @@ class PublicInfrastructureIT {
                 .bodyValue("""
                         {
                           "code": "%s",
-                          "name": "阶段 3 检索项目",
+                          "name": "[E2E_TEST] 阶段 3 检索项目",
                           "description": "混合 RAG 公共设施集成测试"
                         }
                         """.formatted(projectCode))
@@ -509,6 +534,7 @@ class PublicInfrastructureIT {
                 .getResponseBody();
         assertThat(project).isNotNull();
         long projectId = project.path("data").path("id").asLong();
+        createdProjectIds.add(projectId);
 
         byte[] loginGuide = """
                 # 登录认证
@@ -665,7 +691,7 @@ class PublicInfrastructureIT {
                     .bodyValue("""
                             {
                               "code": "%s",
-                              "name": "阶段 4 执行项目",
+                              "name": "[E2E_TEST] 阶段 4 执行项目",
                               "description": "受控 HTTP 执行集成测试"
                             }
                             """.formatted(projectCode))
@@ -676,6 +702,7 @@ class PublicInfrastructureIT {
                     .getResponseBody();
             assertThat(project).isNotNull();
             long projectId = project.path("data").path("id").asLong();
+            createdProjectIds.add(projectId);
 
             JsonNode environment = client.post()
                     .uri("/api/v1/projects/{projectId}/environments", projectId)
@@ -878,10 +905,9 @@ class PublicInfrastructureIT {
                             }
                             """.formatted(environmentId))
                     .exchange()
-                    .expectStatus().isCreated()
+                    .expectStatus().isEqualTo(HttpStatus.CONFLICT)
                     .expectBody()
-                    .jsonPath("$.data.status").isEqualTo("FAILED")
-                    .jsonPath("$.data.errorCode").isEqualTo("EXECUTOR_409_002");
+                    .jsonPath("$.code").isEqualTo("EXECUTOR_409_002");
             wireMock.verify(0, deleteRequestedFor(urlEqualTo("/users/7")));
 
             client.delete()
@@ -934,7 +960,7 @@ class PublicInfrastructureIT {
                     .bodyValue("""
                             {
                               "code": "%s",
-                              "name": "阶段 5 Agent 项目",
+                              "name": "[E2E_TEST] 阶段 5 Agent 项目",
                               "description": "Agent 状态机和工具调用集成测试"
                             }
                             """.formatted(projectCode))
@@ -945,6 +971,7 @@ class PublicInfrastructureIT {
                     .getResponseBody();
             assertThat(project).isNotNull();
             long projectId = project.path("data").path("id").asLong();
+            createdProjectIds.add(projectId);
 
             JsonNode environment = client.post()
                     .uri("/api/v1/projects/{projectId}/environments", projectId)
@@ -1040,7 +1067,7 @@ class PublicInfrastructureIT {
             );
             assertThat(completed.path("data").path("toolCallCount").asInt()).isEqualTo(3);
             assertThat(completed.path("data").path("resultSummary").asText())
-                    .contains("2 个步骤", "通过 2 个", "失败 0 个");
+                    .contains("共 2 个已执行步骤", "通过 2 个", "失败 0 个");
             assertThat(completed.path("data").path("toolCalls").toString())
                     .contains("searchApiDocument", "executeHttpRequest", "generateTestReport")
                     .doesNotContain("stage5-agent-secret", "stage5-plain-password");
@@ -1262,9 +1289,10 @@ class PublicInfrastructureIT {
                     .bodyValue("""
                             {
                               "approved": true,
-                              "note": "仅批准删除 WireMock 测试数据"
+                              "note": "仅批准删除 WireMock 测试数据",
+                              "planHash": "%s"
                             }
-                            """)
+                            """.formatted(waiting.path("data").path("confirmation").path("planHash").asText()))
                     .exchange()
                     .expectStatus().isOk();
             waitForAgentStatus(
@@ -1334,7 +1362,7 @@ class PublicInfrastructureIT {
                 .bodyValue("""
                         {
                           "code": "%s",
-                          "name": "%s"
+                          "name": "[E2E_TEST] %s"
                         }
                         """.formatted(code, name))
                 .exchange()
@@ -1343,7 +1371,9 @@ class PublicInfrastructureIT {
                 .returnResult()
                 .getResponseBody();
         assertThat(project).isNotNull();
-        return project.path("data").path("id").asLong();
+        long projectId = project.path("data").path("id").asLong();
+        createdProjectIds.add(projectId);
+        return projectId;
     }
 
     private WebTestClient.ResponseSpec uploadOpenApi(

@@ -13,6 +13,7 @@ public enum AgentTaskStatus {
     REPLANNING,
     REPORTING,
     SUCCEEDED,
+    NEEDS_REVIEW,
     FAILED,
     CANCELLED;
 
@@ -22,6 +23,6 @@ public enum AgentTaskStatus {
      * @return 是否为终态
      */
     public boolean terminal() {
-        return this == SUCCEEDED || this == FAILED || this == CANCELLED;
+        return this == SUCCEEDED || this == NEEDS_REVIEW || this == FAILED || this == CANCELLED;
     }
 }

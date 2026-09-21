@@ -64,6 +64,15 @@ public class AgentToolService {
     }
 
     /**
+     * 判断当前模式是否启用可选业务知识库。
+     *
+     * @return 是否启用业务知识库
+     */
+    public boolean businessKnowledgeEnabled() {
+        return retrievalService.isKnowledgeEnabled();
+    }
+
+    /**
      * 获取指定接口的结构化 Schema。
      */
     @Tool(description = "根据项目标识和接口标识获取 OpenAPI 请求参数、请求体、响应及认证结构")
@@ -101,6 +110,16 @@ public class AgentToolService {
     }
 
     /**
+     * 将编排取消与截止时间检查传入每个 HTTP 步骤及重试边界。
+     */
+    public ScenarioExecutionResult executeConfirmedHttpRequest(
+            Long taskId, Long projectId, ExecuteScenarioRequest request,
+            Set<Integer> confirmedStepIndexes, Runnable executionCheckpoint
+    ) {
+        return executionService.executeForAgent(taskId, projectId, request, confirmedStepIndexes, executionCheckpoint);
+    }
+
+    /**
      * 使用 JSONPath 提取响应值。
      */
     @Tool(description = "使用 JSONPath 从结构化响应体中提取后续步骤变量")
@@ -133,5 +152,20 @@ public class AgentToolService {
     @Tool(description = "汇总 Agent 任务、工具调用和检索证据，生成结构化测试报告")
     public AgentTestReport generateTestReport(Long projectId, Long taskId) {
         return reportService.generate(projectId, taskId);
+    }
+
+    /**
+     * 为失败或取消的终态任务生成标准报告。
+     */
+    public AgentTestReport generateTerminalReport(
+            Long projectId,
+            Long taskId,
+            String failurePhase,
+            String errorCode,
+            String errorMessage
+    ) {
+        return reportService.generateTerminal(
+                projectId, taskId, failurePhase, errorCode, errorMessage
+        );
     }
 }

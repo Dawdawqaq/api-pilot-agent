@@ -8,6 +8,8 @@ import org.springframework.http.HttpStatus;
  */
 public enum KnowledgeErrorCode implements ErrorCode {
 
+    FEATURE_DISABLED("KNOWLEDGE_503_001", "当前运行模式未启用业务知识库，仍可导入 OpenAPI 并执行 API 测试", HttpStatus.SERVICE_UNAVAILABLE),
+
     EMPTY_FILE("KNOWLEDGE_400_001", "文档文件不能为空", HttpStatus.BAD_REQUEST),
     FILE_TOO_LARGE("KNOWLEDGE_413_001", "文档文件超过大小限制", HttpStatus.PAYLOAD_TOO_LARGE),
     UNSUPPORTED_FILE_TYPE(

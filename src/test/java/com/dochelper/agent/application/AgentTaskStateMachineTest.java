@@ -29,6 +29,10 @@ class AgentTaskStateMachineTest {
                     AgentTaskStatus.REPORTING,
                     AgentTaskStatus.SUCCEEDED
             );
+            stateMachine.assertTransition(
+                    AgentTaskStatus.EXECUTING,
+                    AgentTaskStatus.NEEDS_REVIEW
+            );
         }).doesNotThrowAnyException();
     }
 
@@ -40,6 +44,10 @@ class AgentTaskStateMachineTest {
         )).isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> stateMachine.assertTransition(
                 AgentTaskStatus.SUCCEEDED,
+                AgentTaskStatus.EXECUTING
+        )).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> stateMachine.assertTransition(
+                AgentTaskStatus.NEEDS_REVIEW,
                 AgentTaskStatus.EXECUTING
         )).isInstanceOf(BusinessException.class);
     }

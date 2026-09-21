@@ -42,17 +42,17 @@ class StepRetryPolicyTest {
     }
 
     @Test
-    void shouldRetryWriteOnlyWhenIdempotencyKeyExists() {
+    void shouldNotTrustModelSuppliedIdempotencyHeaderForWriteRetry() {
         assertThat(policy.shouldRetry(
                 step("POST", Map.of("Idempotency-Key", "order-001")),
                 ExecutionErrorCode.REMOTE_REQUEST_FAILED.code(),
                 1
-        )).isTrue();
+        )).isFalse();
         assertThat(policy.shouldRetry(
                 step("POST", Map.of("idempotency-key", "order-001")),
                 ExecutionErrorCode.REQUEST_TIMEOUT.code(),
                 2
-        )).isTrue();
+        )).isFalse();
     }
 
     @Test

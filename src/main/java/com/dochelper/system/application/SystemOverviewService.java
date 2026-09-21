@@ -4,7 +4,7 @@ import com.dochelper.common.exception.BusinessException;
 import com.dochelper.common.exception.CommonErrorCode;
 import com.dochelper.infrastructure.config.InfrastructureEndpointProperties;
 import com.dochelper.infrastructure.config.ObjectStorageProperties;
-import com.dochelper.infrastructure.redis.NamespacedRedisKeyFactory;
+import com.dochelper.model.ModelProviderProperties;
 import com.dochelper.system.api.vo.InfrastructureOverviewResponse;
 import com.dochelper.system.domain.model.SystemSetting;
 import com.dochelper.system.domain.repository.SystemSettingRepository;
@@ -22,31 +22,33 @@ public class SystemOverviewService {
 
     private final String applicationName;
     private final SystemSettingRepository systemSettingRepository;
-    private final NamespacedRedisKeyFactory redisKeyFactory;
     private final InfrastructureEndpointProperties infrastructureProperties;
     private final ObjectStorageProperties objectStorageProperties;
+    private final ModelProviderProperties modelProperties;
+    @Value("${dochelper.knowledge.enabled:true}")
+    private boolean knowledgeEnabled = true;
 
     /**
      * 创建系统概览服务。
      *
      * @param applicationName 应用名称
      * @param systemSettingRepository 系统设置仓储
-     * @param redisKeyFactory Redis Key 工厂
      * @param infrastructureProperties 基础设施配置
      * @param objectStorageProperties 对象存储配置
+     * @param modelProperties 模型服务配置
      */
     public SystemOverviewService(
             @Value("${spring.application.name}") String applicationName,
             SystemSettingRepository systemSettingRepository,
-            NamespacedRedisKeyFactory redisKeyFactory,
             InfrastructureEndpointProperties infrastructureProperties,
-            ObjectStorageProperties objectStorageProperties
+            ObjectStorageProperties objectStorageProperties,
+            ModelProviderProperties modelProperties
     ) {
         this.applicationName = applicationName;
         this.systemSettingRepository = systemSettingRepository;
-        this.redisKeyFactory = redisKeyFactory;
         this.infrastructureProperties = infrastructureProperties;
         this.objectStorageProperties = objectStorageProperties;
+        this.modelProperties = modelProperties;
     }
 
     /**
@@ -65,9 +67,10 @@ public class SystemOverviewService {
         return new InfrastructureOverviewResponse(
                 applicationName,
                 schemaVersion.value(),
-                redisKeyFactory.namespace(),
-                infrastructureProperties.qdrantCollection(),
-                objectStorageProperties.bucket()
+                infrastructureProperties.qdrantHealthEnabled() ? infrastructureProperties.qdrantCollection() : null,
+                objectStorageProperties.enabled() ? objectStorageProperties.bucket() : null,
+                knowledgeEnabled,
+                modelProperties.chatModel()
         );
     }
 }

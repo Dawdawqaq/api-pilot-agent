@@ -1,7 +1,6 @@
 package com.dochelper.executor.application;
 
 import java.util.Locale;
-import java.util.Map;
 
 import com.dochelper.common.exception.BusinessException;
 import com.dochelper.executor.api.dto.ExecutionStepRequest;
@@ -22,7 +21,7 @@ public class StepRetryPolicy {
     }
 
     /**
-     * 仅允许幂等请求在连接失败或超时后重试。
+     * 仅允许只读请求在连接失败或超时后重试，模型提供幂等请求头不等于服务端承诺幂等。
      */
     public boolean shouldRetry(ExecutionStepRequest step, String errorCode, int currentAttempt) {
         if (currentAttempt > properties.maxStepRetries()) {
@@ -34,8 +33,7 @@ public class StepRetryPolicy {
         }
         String method = step.method().trim().toUpperCase(Locale.ROOT);
         return "GET".equals(method)
-                || "HEAD".equals(method)
-                || header(step.headers(), "Idempotency-Key") != null;
+                || "HEAD".equals(method);
     }
 
     /**
@@ -54,16 +52,4 @@ public class StepRetryPolicy {
         }
     }
 
-    private String header(Map<String, String> headers, String expectedName) {
-        if (headers == null) {
-            return null;
-        }
-        return headers.entrySet().stream()
-                .filter(entry -> entry.getKey() != null
-                        && entry.getKey().equalsIgnoreCase(expectedName))
-                .map(Map.Entry::getValue)
-                .filter(value -> value != null && !value.isBlank())
-                .findFirst()
-                .orElse(null);
-    }
 }

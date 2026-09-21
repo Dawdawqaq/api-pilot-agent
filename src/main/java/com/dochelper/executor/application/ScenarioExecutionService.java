@@ -74,6 +74,7 @@ public class ScenarioExecutionService {
     private final ExecutorProperties properties;
     private final StepRetryPolicy stepRetryPolicy;
     private final ObjectMapper objectMapper;
+    private final WriteExecutionPolicy writePolicy;
 
     public ScenarioExecutionService(
             ApiProjectRepository projectRepository,
@@ -90,7 +91,8 @@ public class ScenarioExecutionService {
             ContractResultRepository contractResultRepository,
             ExecutorProperties properties,
             StepRetryPolicy stepRetryPolicy,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            WriteExecutionPolicy writePolicy
     ) {
         this.projectRepository = projectRepository;
         this.environmentRepository = environmentRepository;
@@ -107,6 +109,7 @@ public class ScenarioExecutionService {
         this.properties = properties;
         this.stepRetryPolicy = stepRetryPolicy;
         this.objectMapper = objectMapper;
+        this.writePolicy = writePolicy;
     }
 
     public ScenarioExecutionResult execute(Long projectId, ExecuteScenarioRequest request) {
@@ -142,9 +145,25 @@ public class ScenarioExecutionService {
             ExecuteScenarioRequest request,
             Set<Integer> confirmedStepIndexes
     ) {
+        return execute(taskId, projectId, request, confirmedStepIndexes, () -> { });
+    }
+
+    public ScenarioExecutionResult executeForAgent(
+            Long taskId, Long projectId, ExecuteScenarioRequest request,
+            Set<Integer> confirmedStepIndexes, Runnable executionCheckpoint
+    ) {
+        return execute(taskId, projectId, request, Set.copyOf(confirmedStepIndexes), executionCheckpoint);
+    }
+
+    private ScenarioExecutionResult execute(
+            Long taskId, Long projectId, ExecuteScenarioRequest request,
+            Set<Integer> confirmedStepIndexes, Runnable executionCheckpoint
+    ) {
+        executionCheckpoint.run();
         requireProject(projectId);
         ProjectEnvironment environment = requireEnvironment(projectId, request.environmentId());
         validateScenario(request);
+        validatePlanBeforeExecution(projectId, request, confirmedStepIndexes);
         Long executionId = IdWorker.getId();
         LocalDateTime createdAt = LocalDateTime.now();
         auditRepository.create(new ExecutionAudit(
@@ -174,16 +193,20 @@ public class ScenarioExecutionService {
         for (int index = 0; index < request.steps().size(); index++) {
             ExecutionStepRequest step = request.steps().get(index);
             String requestFingerprint = fingerprint(step);
-            AgentStepExecution recovered = findRecovered(taskId, index, requestFingerprint);
-            if (recovered != null) {
-                restoreVariables(recovered, variables);
-                ExecutionStepResult skipped = recoveredResult(index, step);
-                results.add(skipped);
-                saveRecoveredAudit(executionId, skipped);
-                continue;
-            }
             StepHttpOutcome httpOutcome = null;
             try {
+                executionCheckpoint.run();
+                AgentStepExecution recovered = findRecovered(taskId, index, requestFingerprint);
+                if (recovered != null) {
+                    restoreVariables(recovered, variables);
+                    ExecutionStepResult skipped = recoveredResult(index, step);
+                    results.add(skipped);
+                    saveRecoveredAudit(executionId, skipped);
+                    continue;
+                }
+                if (taskId != null) {
+                    writePolicy.requireFreshWrite(step, index, stepExecutionRepository.findByTaskId(taskId));
+                }
                 ResolvedOperation operation = endpointExecutionPolicy.validate(
                         projectId,
                         step,
@@ -196,7 +219,8 @@ public class ScenarioExecutionService {
                         environment,
                         step,
                         variables,
-                        requestFingerprint
+                        requestFingerprint,
+                        executionCheckpoint
                 );
                 HttpExchangeResult exchange = httpOutcome.exchange();
                 List<AssertionResult> configuredAssertions = responseProcessor.assertResponse(
@@ -237,6 +261,7 @@ public class ScenarioExecutionService {
                     break;
                 }
             } catch (BusinessException exception) {
+                exception = writePolicy.classifyFailure(step, exception, httpOutcome != null);
                 if (httpOutcome != null && httpOutcome.stepExecution() != null) {
                     completeFailedStep(httpOutcome.stepExecution(), exception, 0);
                 }
@@ -312,10 +337,12 @@ public class ScenarioExecutionService {
             ProjectEnvironment environment,
             ExecutionStepRequest step,
             Map<String, Object> variables,
-            String requestFingerprint
+            String requestFingerprint,
+            Runnable executionCheckpoint
     ) {
         int localAttempt = 0;
         while (true) {
+            executionCheckpoint.run();
             localAttempt++;
             AgentStepExecution running = createRunningStep(
                     taskId, executionId, stepIndex, step, variables, requestFingerprint
@@ -325,6 +352,7 @@ public class ScenarioExecutionService {
                 HttpExchangeResult exchange = httpExecutor.execute(environment, step, variables);
                 return new StepHttpOutcome(exchange, running);
             } catch (BusinessException exception) {
+                exception = writePolicy.classifyFailure(step, exception, false);
                 completeFailedStep(running, exception, elapsedMillis(startedAt));
                 if (!stepRetryPolicy.shouldRetry(
                         step, exception.getErrorCode().code(), localAttempt
@@ -449,7 +477,39 @@ public class ScenarioExecutionService {
     }
 
     private String fingerprint(ExecutionStepRequest step) {
-        return sha256(toJson(step));
+        return sha256(com.dochelper.common.json.CanonicalJson.normalize(
+                objectMapper.valueToTree(step), objectMapper).toString());
+    }
+
+    /**
+     * 先检查整条链的目录、授权和变量依赖，避免前面已写入才发现后续步骤不合法。
+     */
+    private void validatePlanBeforeExecution(Long projectId, ExecuteScenarioRequest request, Set<Integer> confirmed) {
+        Set<String> available = new java.util.HashSet<>();
+        if (request.initialVariables() != null) {
+            available.addAll(request.initialVariables().keySet());
+        }
+        Pattern placeholder = Pattern.compile("\\{\\{([A-Za-z][A-Za-z0-9_]{0,63})}}");
+        for (int index = 0; index < request.steps().size(); index++) {
+            ExecutionStepRequest step = request.steps().get(index);
+            endpointExecutionPolicy.validate(projectId, step, confirmed.contains(index));
+            var matcher = placeholder.matcher(toJson(step));
+            while (matcher.find()) {
+                if (!available.contains(matcher.group(1))) {
+                    throw new BusinessException(ExecutionErrorCode.VARIABLE_NOT_FOUND,
+                            "步骤 " + index + " 引用了未定义或尚未产生的变量：" + matcher.group(1));
+                }
+            }
+            if (step.extractors() != null) {
+                for (var extractor : step.extractors()) {
+                    if (extractor.name() == null || !VARIABLE_NAME.matcher(extractor.name()).matches()
+                            || !available.add(extractor.name())) {
+                        throw new BusinessException(ExecutionErrorCode.INVALID_STEP,
+                                "提取变量名非法或覆盖已有变量，请使用新的变量名");
+                    }
+                }
+            }
+        }
     }
 
     private String sha256(String value) {

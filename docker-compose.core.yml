@@ -1,0 +1,34 @@
+name: apipilot-core
+services:
+  app:
+    build: .
+    ports:
+      - "127.0.0.1:${APP_PORT:-28080}:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker,deepseek,lightweight
+      DB_URL: jdbc:mysql://mysql:3306/dochelper?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      DB_USERNAME: dochelper
+      DB_PASSWORD: ${DB_PASSWORD:?请设置数据库密码}
+      SECRET_STORE_MASTER_KEY: ${SECRET_STORE_MASTER_KEY:?请设置稳定主密钥}
+      AI_BASE_URL: https://api.deepseek.com
+      AI_CHAT_MODEL: ${AI_CHAT_MODEL:-deepseek-flash}
+      AI_API_KEY: ${AI_API_KEY:?请设置真实模型密钥}
+    depends_on:
+      mysql:
+        condition: service_healthy
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: dochelper
+      MYSQL_USER: dochelper
+      MYSQL_PASSWORD: ${DB_PASSWORD:?请设置数据库密码}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请设置数据库管理密码}
+    volumes:
+      - core_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_PASSWORD mysql -udochelper -e 'SELECT 1' dochelper"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+volumes:
+  core_mysql_data:

@@ -8,6 +8,7 @@ import com.dochelper.agent.domain.AgentConfirmation;
 import com.dochelper.agent.domain.AgentConversation;
 import com.dochelper.agent.domain.AgentMessage;
 import com.dochelper.agent.domain.AgentModelCall;
+import com.dochelper.agent.domain.AgentPlanRevision;
 import com.dochelper.agent.domain.AgentTask;
 import com.dochelper.agent.domain.AgentTaskEvent;
 import com.dochelper.agent.domain.AgentTaskStatus;
@@ -30,6 +31,10 @@ public interface AgentTaskRepository {
     Optional<AgentTask> findTask(Long projectId, Long taskId);
 
     List<AgentTask> findTasks(Long projectId, int limit);
+
+    long countActiveTasks();
+
+    long countActiveTasks(Long projectId);
 
     List<AgentTask> findRecoverableTasks(LocalDateTime now, int limit);
 
@@ -66,6 +71,8 @@ public interface AgentTaskRepository {
 
     List<AgentToolCall> findToolCalls(Long taskId);
 
+    void interruptRunningToolCalls(Long taskId, LocalDateTime now);
+
     void createModelCall(AgentModelCall modelCall);
 
     List<AgentModelCall> findModelCalls(Long taskId);
@@ -83,17 +90,5 @@ public interface AgentTaskRepository {
             LocalDateTime decidedAt
     );
 
-    boolean updateModifiedPlan(
-            Long taskId,
-            String planJson,
-            int expectedModificationCount,
-            int nextModificationCount
-    );
-
-    boolean refreshPendingConfirmation(
-            Long taskId,
-            int stepIndex,
-            String newPlanHash,
-            LocalDateTime expiresAt
-    );
+    void revisePendingPlan(AgentPlanRevision revision);
 }

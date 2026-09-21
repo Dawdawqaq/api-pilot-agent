@@ -1,250 +1,178 @@
 package com.dochelper.agent.application;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.IntNode;
-import com.dochelper.agent.api.dto.ConfirmationDecisionRequest;
-import com.dochelper.agent.api.dto.ModifyPlanRequest;
-import com.dochelper.agent.api.vo.AgentTaskResponse;
-import com.dochelper.agent.config.AgentProperties;
-import com.dochelper.agent.domain.AgentConfirmation;
-import com.dochelper.agent.domain.AgentEventType;
-import com.dochelper.agent.domain.AgentPlanStep;
-import com.dochelper.agent.domain.AgentTask;
-import com.dochelper.agent.domain.AgentTaskStatus;
-import com.dochelper.agent.domain.ConfirmationStatus;
-import com.dochelper.agent.domain.repository.AgentTaskRepository;
-import com.dochelper.agent.exception.AgentErrorCode;
-import com.dochelper.common.exception.BusinessException;
-import com.dochelper.executor.api.dto.ExecutionStepRequest;
-import com.dochelper.executor.api.dto.ResponseAssertionRequest;
-import com.dochelper.executor.application.SensitiveDataSanitizer;
-import com.dochelper.executor.config.ExecutorProperties;
-import com.dochelper.executor.domain.AssertionType;
-import com.dochelper.openapi.domain.repository.OpenApiCatalogRepository;
-import com.dochelper.project.domain.ApiProject;
-import com.dochelper.project.domain.ProjectStatus;
-import com.dochelper.project.domain.repository.ApiProjectRepository;
-import com.dochelper.project.domain.repository.ProjectEnvironmentRepository;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.core.task.SyncTaskExecutor;
-
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import com.dochelper.agent.api.dto.ConfirmationDecisionRequest;
+import com.dochelper.agent.api.dto.ModifyPlanRequest;
+import com.dochelper.agent.config.AgentProperties;
+import com.dochelper.agent.domain.*;
+import com.dochelper.agent.domain.repository.AgentTaskRepository;
+import com.dochelper.agent.exception.AgentErrorCode;
+import com.dochelper.common.exception.BusinessException;
+import com.dochelper.executor.api.dto.ExecutionStepRequest;
+import com.dochelper.executor.application.SensitiveDataSanitizer;
+import com.dochelper.executor.config.ExecutorProperties;
+import com.dochelper.openapi.domain.repository.OpenApiCatalogRepository;
+import com.dochelper.project.domain.*;
+import com.dochelper.project.domain.repository.*;
+import com.dochelper.secret.application.InMemorySecretStore;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.core.task.SyncTaskExecutor;
+
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
- * 验证多轮对话修改计划的 3 轮熔断、并发防护与哈希同步机制。
+ * 验证计划版本、明文上下文、持久化失败及确认调度顺序，避免仅测试计数变化。
  */
 class AgentPlanModificationTest {
-
+    private static final long PROJECT_ID = 100L;
+    private static final long TASK_ID = 200L;
+    private static final String PLAN_HASH = "a".repeat(64);
+    private final ObjectMapper mapper = new ObjectMapper();
     private AgentTaskRepository repository;
-    private ApiProjectRepository projectRepository;
-    private ProjectEnvironmentRepository environmentRepository;
-    private OpenApiCatalogRepository openApiCatalogRepository;
-    private AgentRuntimeRegistry runtimeRegistry;
+    private AgentRuntimeRegistry runtime;
     private AgentTaskRunner runner;
     private AgentPlanner planner;
-    private AgentTaskStateMachine stateMachine;
-    private SensitiveDataSanitizer sanitizer;
-    private AgentProperties properties;
-    private ObjectMapper objectMapper;
     private AgentTaskService service;
-
-    private final Long projectId = 100L;
-    private final Long taskId = 200L;
+    private InMemorySecretStore secrets;
 
     @BeforeEach
     void setUp() {
         repository = mock(AgentTaskRepository.class);
-        projectRepository = mock(ApiProjectRepository.class);
-        environmentRepository = mock(ProjectEnvironmentRepository.class);
-        openApiCatalogRepository = mock(OpenApiCatalogRepository.class);
-        runtimeRegistry = mock(AgentRuntimeRegistry.class);
         runner = mock(AgentTaskRunner.class);
-        planner = new DeterministicAgentPlanner();
-        stateMachine = new AgentTaskStateMachine();
-        sanitizer = new SensitiveDataSanitizer(new ExecutorProperties(
-                Duration.ofSeconds(1), Duration.ofSeconds(2), 1024 * 1024,
-                512 * 1024, 10, 2, Duration.ofMillis(10),
-                "(?i).*(authorization|token|password|secret|credential|session|cookie|api[-_]?key|email|phone).*"
-        ));
-        properties = new AgentProperties(
-                10, 30, 2, 3, 2,
-                Duration.ofMinutes(2), Duration.ofMinutes(10),
-                Duration.ofMillis(500), Duration.ofSeconds(30),
-                20000, 12
-        );
-        objectMapper = new ObjectMapper();
-
-        service = new AgentTaskService(
-                repository,
-                projectRepository,
-                environmentRepository,
-                openApiCatalogRepository,
-                runtimeRegistry,
-                runner,
-                planner,
-                stateMachine,
-                new SyncTaskExecutor(),
-                sanitizer,
-                properties,
-                objectMapper
-        );
-
-        when(projectRepository.findById(projectId)).thenReturn(Optional.of(new ApiProject(
-                projectId, "Test Project", "TEST_CODE", "desc", ProjectStatus.ACTIVE, 1L, LocalDateTime.now(), LocalDateTime.now()
-        )));
+        planner = mock(AgentPlanner.class);
+        secrets = new InMemorySecretStore();
+        runtime = new AgentRuntimeRegistry(secrets, mapper);
+        runtime.create(TASK_ID, "测试目标", Map.of("password", "fixture-secret"), List.of());
+        runtime.updatePlan(TASK_ID, List.of(step("原计划", "POST", "/posts")));
+        var projects = mock(ApiProjectRepository.class);
+        when(projects.findById(PROJECT_ID)).thenReturn(Optional.of(new ApiProject(
+                PROJECT_ID, "[E2E_TEST]", "TEST", "测试", ProjectStatus.ACTIVE, 0L,
+                LocalDateTime.now(), LocalDateTime.now())));
+        var properties = new AgentProperties(10, 30, 2, 3, 2, Duration.ofMinutes(2),
+                Duration.ofMinutes(10), Duration.ofMillis(500), Duration.ofSeconds(30),
+                20000, 12, 4, 2, 8);
+        var sanitizer = new SensitiveDataSanitizer(new ExecutorProperties(
+                Duration.ofSeconds(1), Duration.ofSeconds(2), 1048576, 524288, 10, 2,
+                Duration.ofMillis(10), "(?i).*(authorization|token|password|secret|cookie).*"));
+        service = new AgentTaskService(repository, projects, mock(ProjectEnvironmentRepository.class),
+                mock(OpenApiCatalogRepository.class), runtime, runner, planner, new AgentTaskStateMachine(),
+                new AgentTaskAdmissionService(repository, properties),
+                new SyncTaskExecutor(), sanitizer, properties, mapper);
+        when(repository.findTask(PROJECT_ID, TASK_ID)).thenReturn(Optional.of(task(0)));
+        when(repository.tryAcquireLease(eq(TASK_ID), anyString(), any(), any())).thenReturn(true);
+        when(repository.findConfirmation(TASK_ID, 0)).thenReturn(Optional.of(confirmation(ConfirmationStatus.PENDING)));
+        when(repository.decideConfirmation(anyLong(), any(), any(), any(), anyLong(), any())).thenReturn(true);
+        when(planner.modify(any())).thenReturn(List.of(step("修改后", "POST", "/posts")));
     }
 
     @Test
-    void shouldSuccessfullyModifyPlanAndIncrementCount() {
-        AgentPlanStep initialStep = createSampleStep(0, "GET", "/users");
-        AgentTask task = createWaitingTask(0, List.of(initialStep));
-        when(repository.findTask(projectId, taskId)).thenReturn(Optional.of(task));
-        when(repository.tryAcquireLease(eq(taskId), anyString(), any(), any())).thenReturn(true);
-        when(repository.updateModifiedPlan(eq(taskId), anyString(), eq(0), eq(1))).thenReturn(true);
-        when(repository.refreshPendingConfirmation(eq(taskId), eq(0), anyString(), any())).thenReturn(true);
-        when(openApiCatalogRepository.findEndpoints(projectId, null)).thenReturn(List.of());
-
-        AgentTaskResponse response = service.modifyPlan(
-                projectId, taskId, new ModifyPlanRequest("将查询参数改为 pageSize=20")
-        );
-
-        verify(repository).updateModifiedPlan(eq(taskId), anyString(), eq(0), eq(1));
-        verify(repository).refreshPendingConfirmation(eq(taskId), eq(0), anyString(), any());
-        verify(repository).releaseLease(eq(taskId), anyString());
+    void shouldPersistAndActivateSameRevisionWithRestorableContext() throws Exception {
+        service.modifyPlan(PROJECT_ID, TASK_ID, new ModifyPlanRequest("修改标题"));
+        var captor = ArgumentCaptor.forClass(AgentPlanRevision.class);
+        verify(repository).revisePendingPlan(captor.capture());
+        AgentPlanRevision revision = captor.getValue();
+        String reference = mapper.readTree(revision.contextJsonRedacted()).path("runtimeContextRef").asText();
+        assertThat(runtime.reference(TASK_ID)).contains(reference);
+        assertThat(runtime.find(TASK_ID).orElseThrow().plan().getFirst().objective()).isEqualTo("修改后");
+        var restored = new AgentRuntimeRegistry(secrets, mapper);
+        assertThat(restored.restore(TASK_ID, reference)).isTrue();
+        assertThat(mapper.writeValueAsString(restored.find(TASK_ID).orElseThrow()))
+                .isEqualTo(mapper.writeValueAsString(runtime.find(TASK_ID).orElseThrow()));
+        assertThat(revision.planJsonRedacted()).doesNotContain("fixture-secret");
+        verify(runner).validatePlan(anyList());
     }
 
     @Test
-    void shouldPassRawInstructionToPlannerAndSanitizedToEvent() {
-        AgentPlanStep initialStep = createSampleStep(0, "GET", "/users");
-        AgentTask task = createWaitingTask(0, List.of(initialStep));
-        when(repository.findTask(projectId, taskId)).thenReturn(Optional.of(task));
-        when(repository.tryAcquireLease(eq(taskId), anyString(), any(), any())).thenReturn(true);
-        when(repository.updateModifiedPlan(eq(taskId), anyString(), eq(0), eq(1))).thenReturn(true);
-        when(repository.refreshPendingConfirmation(eq(taskId), eq(0), anyString(), any())).thenReturn(true);
-        when(openApiCatalogRepository.findEndpoints(projectId, null)).thenReturn(List.of());
-
-        // 模拟包含敏感 Token 的修改指令
-        String rawInstruction = "将请求头 Authorization 改为 Bearer secret_token_123456";
-        service.modifyPlan(projectId, taskId, new ModifyPlanRequest(rawInstruction));
-
-        // 验证事件中的指令被安全脱敏（不包含明文密钥）
-        verify(repository).appendEvent(org.mockito.ArgumentMatchers.argThat(event -> {
-            assertThat(event.eventType()).isEqualTo(AgentEventType.PLAN_REVISED);
-            assertThat(event.payloadJson()).doesNotContain("secret_token_123456");
-            return true;
-        }));
+    void shouldKeepOldRuntimeIfDatabaseRejectsRevision() {
+        String originalReference = runtime.reference(TASK_ID).orElseThrow();
+        doThrow(new BusinessException(AgentErrorCode.TASK_BUSY)).when(repository).revisePendingPlan(any());
+        assertThatThrownBy(() -> service.modifyPlan(PROJECT_ID, TASK_ID, new ModifyPlanRequest("修改")))
+                .isInstanceOf(BusinessException.class);
+        assertThat(runtime.reference(TASK_ID)).contains(originalReference);
+        assertThat(secrets.get(originalReference)).isPresent();
+        assertThat(runtime.find(TASK_ID).orElseThrow().plan().getFirst().objective()).isEqualTo("原计划");
     }
 
     @Test
-    void shouldRejectModificationWhenExceedingMaxLimit() {
-        // 当前修改次数已达 3 次
-        AgentTask task = createWaitingTask(3, List.of(createSampleStep(0, "POST", "/users")));
-        when(repository.findTask(projectId, taskId)).thenReturn(Optional.of(task));
+    void shouldUseRawPlanForModelButRedactStoredPlan() {
+        when(planner.modify(any())).thenReturn(List.of(new AgentPlanStep(0, "修改后",
+                new ExecutionStepRequest("步骤", "POST", "/posts", Map.of(), Map.of(),
+                        Map.of("Authorization", "Bearer fixture-secret"), null, null, List.of(), List.of(), false))));
+        service.modifyPlan(PROJECT_ID, TASK_ID, new ModifyPlanRequest("修改"));
+        var captor = ArgumentCaptor.forClass(AgentPlanRevision.class);
+        verify(repository).revisePendingPlan(captor.capture());
+        assertThat(captor.getValue().planJsonRedacted()).doesNotContain("fixture-secret");
+        assertThat(runtime.find(TASK_ID).orElseThrow().plan().getFirst().request().headers())
+                .containsEntry("Authorization", "Bearer fixture-secret");
+    }
 
-        assertThatThrownBy(() -> service.modifyPlan(
-                projectId, taskId, new ModifyPlanRequest("再次修改")
-        ))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
+    @Test
+    void shouldReleaseLeaseBeforeSchedulingApprovedTask() {
+        service.confirm(PROJECT_ID, TASK_ID, 0L, new ConfirmationDecisionRequest(true, "同意", PLAN_HASH));
+        var order = inOrder(repository, runner);
+        order.verify(repository).releaseLease(eq(TASK_ID), anyString());
+        order.verify(runner).resumeApproved(PROJECT_ID, TASK_ID);
+    }
+
+    @Test
+    void shouldRejectStaleBrowserConfirmation() {
+        assertThatThrownBy(() -> service.confirm(PROJECT_ID, TASK_ID, 0L,
+                new ConfirmationDecisionRequest(true, "同意", "b".repeat(64))))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("计划已变化");
+        verify(repository, never()).decideConfirmation(anyLong(), any(), any(), any(), anyLong(), any());
+        verify(runner, never()).resumeApproved(anyLong(), anyLong());
+    }
+
+    @Test
+    void shouldRejectModificationAfterApproval() {
+        when(repository.findConfirmation(TASK_ID, 0)).thenReturn(Optional.of(confirmation(ConfirmationStatus.APPROVED)));
+        assertThatThrownBy(() -> service.modifyPlan(PROJECT_ID, TASK_ID, new ModifyPlanRequest("修改")))
+                .isInstanceOf(BusinessException.class);
+        verifyNoInteractions(planner);
+    }
+
+    @Test
+    void shouldRejectFourthModification() {
+        when(repository.findTask(PROJECT_ID, TASK_ID)).thenReturn(Optional.of(task(3)));
+        assertThatThrownBy(() -> service.modifyPlan(PROJECT_ID, TASK_ID, new ModifyPlanRequest("修改")))
+                .isInstanceOf(BusinessException.class).extracting("errorCode")
                 .isEqualTo(AgentErrorCode.PLAN_MODIFICATION_LIMIT);
     }
 
     @Test
-    void shouldRejectModificationWhenTaskBusy() {
-        AgentTask task = createWaitingTask(0, List.of(createSampleStep(0, "POST", "/users")));
-        when(repository.findTask(projectId, taskId)).thenReturn(Optional.of(task));
-        // 租约争抢失败（并发修改中）
-        when(repository.tryAcquireLease(eq(taskId), anyString(), any(), any())).thenReturn(false);
-
-        assertThatThrownBy(() -> service.modifyPlan(
-                projectId, taskId, new ModifyPlanRequest("修改参数")
-        ))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(AgentErrorCode.TASK_BUSY);
+    void shouldRejectModificationAndConfirmationWhenBusy() {
+        when(repository.tryAcquireLease(eq(TASK_ID), anyString(), any(), any())).thenReturn(false);
+        assertThatThrownBy(() -> service.modifyPlan(PROJECT_ID, TASK_ID, new ModifyPlanRequest("修改")))
+                .isInstanceOf(BusinessException.class).extracting("errorCode").isEqualTo(AgentErrorCode.TASK_BUSY);
+        assertThatThrownBy(() -> service.confirm(PROJECT_ID, TASK_ID, 0L,
+                new ConfirmationDecisionRequest(true, "同意", PLAN_HASH)))
+                .isInstanceOf(BusinessException.class).extracting("errorCode").isEqualTo(AgentErrorCode.TASK_BUSY);
     }
 
-    @Test
-    void shouldRejectConfirmationWhenTaskBusy() {
-        AgentTask task = createWaitingTask(0, List.of(createSampleStep(0, "POST", "/users")));
-        when(repository.findTask(projectId, taskId)).thenReturn(Optional.of(task));
-        // 租约争抢失败（正在 modify 中）
-        when(repository.tryAcquireLease(eq(taskId), anyString(), any(), any())).thenReturn(false);
-
-        assertThatThrownBy(() -> service.confirm(
-                projectId, taskId, 1L, new ConfirmationDecisionRequest(true, "approve")
-        ))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(AgentErrorCode.TASK_BUSY);
+    private AgentTask task(int modifications) {
+        return new AgentTask(TASK_ID, PROJECT_ID, 1L, 1L, "测试目标", AgentTaskStatus.WAITING_CONFIRMATION,
+                0, 10, 0, 0, modifications, List.of(step("脱敏展示", "POST", "/posts")), "{}",
+                null, null, null, false, 0, LocalDateTime.now().plusHours(1), LocalDateTime.now(),
+                LocalDateTime.now(), null, LocalDateTime.now());
     }
 
-    private AgentTask createWaitingTask(int modificationCount, List<AgentPlanStep> plan) {
-        return new AgentTask(
-                taskId,
-                projectId,
-                1L,
-                1L,
-                "测试目标",
-                AgentTaskStatus.WAITING_CONFIRMATION,
-                0,
-                10,
-                0,
-                0,
-                modificationCount,
-                plan,
-                "{}",
-                null,
-                null,
-                null,
-                false,
-                0,
-                LocalDateTime.now().plusHours(1),
-                LocalDateTime.now(),
-                LocalDateTime.now(),
-                null,
-                LocalDateTime.now()
-        );
+    private AgentConfirmation confirmation(ConfirmationStatus status) {
+        return new AgentConfirmation(300L, TASK_ID, 0, status, "{}", PLAN_HASH, null, null,
+                LocalDateTime.now().plusMinutes(10), LocalDateTime.now(), null);
     }
 
-    private AgentPlanStep createSampleStep(int index, String method, String path) {
-        return new AgentPlanStep(
-                index,
-                "测试步骤 " + index,
-                new ExecutionStepRequest(
-                        "step-" + index,
-                        method,
-                        path,
-                        Map.of(),
-                        Map.of(),
-                        Map.of(),
-                        null,
-                        null,
-                        List.of(),
-                        List.of(new ResponseAssertionRequest(
-                                AssertionType.STATUS_CODE,
-                                null,
-                                IntNode.valueOf(200),
-                                null
-                        )),
-                        "POST".equalsIgnoreCase(method) || "DELETE".equalsIgnoreCase(method)
-                )
-        );
+    private AgentPlanStep step(String objective, String method, String path) {
+        return new AgentPlanStep(0, objective, new ExecutionStepRequest("步骤", method, path,
+                Map.of(), Map.of(), Map.of(), null, null, List.of(), List.of(), false));
     }
 }

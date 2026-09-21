@@ -28,8 +28,6 @@ dochelper:
     embedding-api-key: ${AI_EMBEDDING_API_KEY:}
     embedding-model: ${AI_EMBEDDING_MODEL:text-embedding-v4}
     embedding-dimensions: ${AI_EMBEDDING_DIMENSIONS:}
-  redis:
-    namespace: "dochelper:"
   storage:
     enabled: false
     endpoint: http://localhost:9000
@@ -65,12 +63,17 @@ dochelper:
     max-replans: 2
     max-plan-modifications: 3
     max-tool-retries: 2
-    task-timeout: 2m
+    # 总墙钟预算包括用户等待；待确认期限不得晚于任务截止时间。
+    task-timeout: 15m
     confirmation-timeout: 10m
     event-poll-interval: 500ms
     lease-duration: 30s
     max-total-model-tokens: 20000
     default-endpoint-top-k: 12
+    # 单用户工具仍限制任务并发，避免误操作堆积模型调用和写请求。
+    max-concurrent-tasks: 4
+    max-concurrent-tasks-per-project: 2
+    task-queue-capacity: 8
 
 mybatis-plus:
   configuration:

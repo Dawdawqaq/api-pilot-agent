@@ -5,15 +5,17 @@ package com.dochelper.system.api.vo;
  *
  * @param application 应用名称
  * @param schemaVersion 数据库结构版本
- * @param redisNamespace Redis Key 命名空间
  * @param qdrantCollection Qdrant Collection
  * @param objectStorageBucket MinIO Bucket
+ * @param knowledgeEnabled 是否启用业务知识库
+ * @param chatModel 当前对话模型名称
  */
 public record InfrastructureOverviewResponse(
         String application,
         String schemaVersion,
-        String redisNamespace,
         String qdrantCollection,
-        String objectStorageBucket
+        String objectStorageBucket,
+        boolean knowledgeEnabled,
+        String chatModel
 ) {
 }

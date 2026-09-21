@@ -15,6 +15,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param taskTimeout 任务总超时
  * @param confirmationTimeout 人工确认有效期
  * @param eventPollInterval 事件流轮询间隔
+ * @param maxConcurrentTasks 全局最大非终态任务数
+ * @param maxConcurrentTasksPerProject 单项目最大非终态任务数
+ * @param taskQueueCapacity 本机任务线程池排队容量
  */
 @ConfigurationProperties(prefix = "dochelper.agent")
 public record AgentProperties(
@@ -28,6 +31,9 @@ public record AgentProperties(
         Duration eventPollInterval,
         Duration leaseDuration,
         int maxTotalModelTokens,
-        int defaultEndpointTopK
+        int defaultEndpointTopK,
+        int maxConcurrentTasks,
+        int maxConcurrentTasksPerProject,
+        int taskQueueCapacity
 ) {
 }

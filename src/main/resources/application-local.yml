@@ -9,13 +9,6 @@ spring:
       maximum-pool-size: 10
       connection-timeout: 3000
       validation-timeout: 1000
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      timeout: 2s
-      connect-timeout: 2s
-      client-name: dochelper
   ai:
     vectorstore:
       qdrant:

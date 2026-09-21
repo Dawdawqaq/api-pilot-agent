@@ -17,14 +17,14 @@ class DeepSeekAiConfigurationTest {
     @Test
     void shouldFallbackToDeterministicWhenModelIsLocalOrNull() {
         ModelProviderProperties defaultProps = new ModelProviderProperties(
-                "https://api.deepseek.com", "test-key", "deepseek-v4-flash",
+                "https://api.deepseek.com", "test-key", "deepseek-flash",
                 null, null, "deterministic-local", null
         );
         EmbeddingModel model = configuration.deepSeekEmbeddingModel(defaultProps);
         assertThat(model).isInstanceOf(DeterministicEmbeddingModel.class);
 
         ModelProviderProperties nullProps = new ModelProviderProperties(
-                "https://api.deepseek.com", "test-key", "deepseek-v4-flash",
+                "https://api.deepseek.com", "test-key", "deepseek-flash",
                 null, null, null, null
         );
         EmbeddingModel nullModel = configuration.deepSeekEmbeddingModel(nullProps);
@@ -34,7 +34,7 @@ class DeepSeekAiConfigurationTest {
     @Test
     void shouldCreateOpenAiEmbeddingModelWhenExternalModelConfigured() {
         ModelProviderProperties props = new ModelProviderProperties(
-                "https://api.deepseek.com", "test-key", "deepseek-v4-flash",
+                "https://api.deepseek.com", "test-key", "deepseek-flash",
                 "https://api.openai.com", "openai-key", "text-embedding-3-small", 1536
         );
         EmbeddingModel model = configuration.deepSeekEmbeddingModel(props);

@@ -1,488 +1,138 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="ApiPilot API 测试诊断 Agent 控制台">
-    <title>ApiPilot · Agent Console</title>
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="/css/app.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="description" content="DocHelper (ApiPilot) - 面向开发者的 REST API 调用链测试 Agent">
+  <title>DocHelper (ApiPilot) | API Agent 测试平台</title>
+
+  <!-- High-Craft Design System Stylesheets -->
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
 </head>
 <body>
-<div class="app-shell">
-    <aside class="sidebar">
-        <div class="brand">
-            <div class="brand-mark">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M5 5.5h14v9H8l-3 3v-12Z"></path>
-                    <path d="M9 9h6M9 12h4"></path>
-                </svg>
-            </div>
-            <div>
-                <strong>ApiPilot</strong>
-                <span>Agent Console</span>
-            </div>
+  <div id="app-container">
+    <!-- Top Header Navigation Bar -->
+    <header id="top-bar">
+      <!-- Brand Title -->
+      <div class="brand-section">
+        <div class="brand-logo">⚡</div>
+        <div class="flex flex-col">
+          <span class="brand-title">DocHelper</span>
+          <span class="brand-subtitle">ApiPilot Agent Platform</span>
+        </div>
+      </div>
+
+      <!-- Center Context: Project & Environment Switchers -->
+      <div class="header-center">
+        <div class="project-select-wrapper">
+          <span style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">项目:</span>
+          <select id="header-project-select" class="form-select" style="max-width: 240px; padding: 4px 10px; font-size: 13px; font-weight: 500;">
+            <option value="">正在加载项目...</option>
+          </select>
         </div>
 
-        <nav class="nav-list" aria-label="主导航">
-            <button class="nav-item active" data-view-target="overview">
-                <span class="nav-icon">⌂</span>
-                运行概览
-            </button>
-            <button class="nav-item" data-view-target="workspace">
-                <span class="nav-icon">◇</span>
-                项目与知识
-            </button>
-            <button class="nav-item" data-view-target="agent">
-                <span class="nav-icon">✦</span>
-                Agent 实验台
-            </button>
-            <button class="nav-item" data-view-target="reports">
-                <span class="nav-icon">▤</span>
-                测试报告
-            </button>
-        </nav>
-
-        <div class="sidebar-footer">
-            <div class="system-state">
-                <span class="pulse"></span>
-                <div>
-                    <strong id="system-status">正在检查</strong>
-                    <span>公共开发设施</span>
-                </div>
-            </div>
-            <span class="version">ApiPilot · Open Source Edition</span>
+        <div class="env-select-wrapper">
+          <span style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">环境:</span>
+          <select id="header-env-select" class="form-select" style="max-width: 200px; padding: 4px 10px; font-size: 12px; font-family: var(--font-mono);">
+            <option value="">加载中...</option>
+          </select>
         </div>
-    </aside>
+      </div>
 
-    <main class="main-area">
-        <header class="topbar">
-            <div>
-                <p class="eyebrow">API TESTING INTELLIGENCE</p>
-                <h1 id="page-title">运行概览</h1>
-            </div>
-            <div class="topbar-actions">
-                <label class="project-picker">
-                    <span>当前项目</span>
-                    <select id="project-select" aria-label="选择当前项目">
-                        <option value="">请选择项目</option>
-                    </select>
-                </label>
-                <button class="icon-button" id="refresh-button" title="刷新当前数据">↻</button>
-            </div>
-        </header>
+      <!-- Right Actions: Model Pill & Theme Toggle -->
+      <div class="header-right">
+        <div class="model-pill" id="header-model-pill">
+          <span class="badge-dot" style="background:var(--color-success)"></span>
+          <span>检测模型中...</span>
+        </div>
 
-        <div id="toast-region" class="toast-region" aria-live="polite"></div>
+        <button class="btn btn-ghost btn-icon btn-sm" id="btn-theme-toggle" title="切换主题">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+        </button>
+      </div>
+    </header>
 
-        <section class="view active" data-view="overview">
-            <div class="hero-card">
-                <div>
-                    <span class="status-chip"><i></i> Agent Backend Online</span>
-                    <h2>从接口知识到<br><em>可验证的执行证据</em></h2>
-                    <p>让 Agent 检索 OpenAPI 与业务文档，在确定性安全边界内规划、调用、观察并生成报告。</p>
-                    <button class="primary-button" data-jump="agent">
-                        启动测试任务
-                        <span>→</span>
-                    </button>
-                </div>
-                <div class="flow-visual" aria-label="Agent 工作流">
-                    <div class="orbit orbit-one"></div>
-                    <div class="orbit orbit-two"></div>
-                    <div class="core-node">AP</div>
-                    <span class="flow-node node-rag">RAG</span>
-                    <span class="flow-node node-plan">PLAN</span>
-                    <span class="flow-node node-tool">TOOLS</span>
-                    <span class="flow-node node-report">REPORT</span>
-                </div>
-            </div>
+    <!-- Shell Body: Sidebar + Main Content View -->
+    <div id="shell-body">
+      <nav id="sidebar" aria-label="侧边主导航">
+        <div class="nav-group">
+          <div class="nav-item active" data-view="overview">
+            <span class="nav-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+            </span>
+            <span>概览大盘</span>
+          </div>
 
-            <div class="metric-grid">
-                <article class="metric-card">
-                    <span class="metric-label">项目</span>
-                    <strong id="metric-projects">0</strong>
-                    <small>已登记的被测服务</small>
-                </article>
-                <article class="metric-card">
-                    <span class="metric-label">Agent 任务</span>
-                    <strong id="metric-tasks">0</strong>
-                    <small>当前项目历史任务</small>
-                </article>
-                <article class="metric-card">
-                    <span class="metric-label">成功率</span>
-                    <strong id="metric-success">—</strong>
-                    <small>基于持久化报告</small>
-                </article>
-                <article class="metric-card accent-card">
-                    <span class="metric-label">安全边界</span>
-                    <strong>6</strong>
-                    <small>强类型受控工具</small>
-                </article>
-            </div>
+          <div class="nav-item" data-view="workbench">
+            <span class="nav-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+            </span>
+            <span>Agent 工作台</span>
+          </div>
 
-            <div class="two-column">
-                <article class="panel">
-                    <div class="panel-heading">
-                        <div>
-                            <span class="section-index">01</span>
-                            <h3>最近任务</h3>
-                        </div>
-                        <button class="text-button" data-jump="agent">查看全部</button>
-                    </div>
-                    <div id="overview-task-list" class="compact-list empty-state">
-                        选择项目后显示任务
-                    </div>
-                </article>
-                <article class="panel">
-                    <div class="panel-heading">
-                        <div>
-                            <span class="section-index">02</span>
-                            <h3>执行链路</h3>
-                        </div>
-                    </div>
-                    <ol class="pipeline-list">
-                        <li><b>01</b><span>知识检索</span><small>MySQL + Qdrant RRF</small></li>
-                        <li><b>02</b><span>结构化规划</span><small>DeepSeek / Stub</small></li>
-                        <li><b>03</b><span>受控执行</span><small>SSRF · Method Policy</small></li>
-                        <li><b>04</b><span>证据报告</span><small>Redacted Audit</small></li>
-                    </ol>
-                </article>
-            </div>
-        </section>
+          <div class="nav-item" data-view="openapi">
+            <span class="nav-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+            </span>
+            <span>OpenAPI 目录</span>
+          </div>
 
-        <section class="view" data-view="workspace">
-            <div class="section-intro">
-                <div>
-                    <p class="eyebrow">WORKSPACE</p>
-                    <h2>项目与知识</h2>
-                    <p>按顺序完成服务、环境、接口目录和业务知识配置，最后统一保存。</p>
-                </div>
-                <button id="delete-project-button" class="danger-button hidden" type="button">
-                    删除当前项目
-                </button>
-            </div>
+          <div class="nav-item" data-view="reports">
+            <span class="nav-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+            </span>
+            <span>测试报告</span>
+          </div>
 
-            <article class="panel setup-panel">
-                <form id="workspace-setup-form" class="setup-form">
-                    <section class="setup-step">
-                        <span class="setup-step-number">1</span>
-                        <div class="setup-step-content">
-                            <div class="setup-step-heading">
-                                <div>
-                                    <h3>被测项目</h3>
-                                    <p>填写服务的稳定标识和用途。</p>
-                                </div>
-                            </div>
-                            <div class="field-row equal-columns">
-                                <label>
-                                    <span>项目编码</span>
-                                    <input name="code" required pattern="[a-z](?:[a-z0-9]|-)*"
-                                           placeholder="japi-server">
-                                </label>
-                                <label>
-                                    <span>项目名称</span>
-                                    <input name="projectName" required maxlength="128"
-                                           placeholder="JApiServer">
-                                </label>
-                            </div>
-                            <label>
-                                <span>项目说明</span>
-                                <textarea name="description" rows="2" required maxlength="500"
-                                          placeholder="例如：用于验证登录和租户管理接口"></textarea>
-                            </label>
-                        </div>
-                    </section>
+          <div class="nav-divider"></div>
 
-                    <section class="setup-step">
-                        <span class="setup-step-number">2</span>
-                        <div class="setup-step-content">
-                            <div class="setup-step-heading">
-                                <div>
-                                    <h3>执行环境</h3>
-                                    <p>限定 Agent 可以访问的地址和 HTTP 方法。</p>
-                                </div>
-                            </div>
-                        <div class="field-row">
-                            <label>
-                                <span>环境名称</span>
-                                    <input name="environmentName" required placeholder="local">
-                            </label>
-                            <label>
-                                <span>Base URL</span>
-                                <input name="baseUrl" required type="url"
-                                           placeholder="http://localhost:8082">
-                            </label>
-                        </div>
-                            <div class="method-field">
-                                <span>允许方法</span>
-                                <details id="method-selector" class="method-selector">
-                                    <summary id="method-selector-summary">GET、POST</summary>
-                                    <div class="method-options">
-                                        <label><input name="allowedMethod" type="checkbox" value="GET" checked> GET</label>
-                                        <label><input name="allowedMethod" type="checkbox" value="POST" checked> POST</label>
-                                        <label><input name="allowedMethod" type="checkbox" value="PUT"> PUT</label>
-                                        <label><input name="allowedMethod" type="checkbox" value="PATCH"> PATCH</label>
-                                        <label><input name="allowedMethod" type="checkbox" value="DELETE"> DELETE</label>
-                                    </div>
-                                </details>
-                            </div>
-                        <div class="check-row">
-                            <label><input name="allowPrivateNetwork" type="checkbox">
-                                允许访问本机/私网目标</label>
-                            <label><input name="defaultEnvironment" type="checkbox" checked>
-                                设为默认环境</label>
-                        </div>
-                        </div>
-                    </section>
+          <div class="nav-item" data-view="projects">
+            <span class="nav-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+            </span>
+            <span>项目与环境</span>
+          </div>
 
-                    <section class="setup-step">
-                        <span class="setup-step-number">3</span>
-                        <div class="setup-step-content">
-                            <div class="setup-step-heading">
-                                <div>
-                                    <h3>OpenAPI 目录</h3>
-                                    <p>Agent 只会执行该目录中声明的接口。</p>
-                                </div>
-                            </div>
-                            <div class="file-field">
-                        <input id="openapi-file" name="file" type="file"
-                               accept=".json,.yaml,.yml" required>
-                        <label for="openapi-file">
-                            <span class="upload-icon">⇧</span>
-                                    <span><strong id="openapi-file-name">选择 OpenAPI 文件</strong>
-                            <small>JSON / YAML · 最大 5 MB</small>
-                                    </span>
-                        </label>
-                        </div>
-                        </div>
-                    </section>
+          <div class="nav-item" data-view="contract">
+            <span class="nav-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            </span>
+            <span>契约与回放</span>
+          </div>
 
-                    <section class="setup-step">
-                        <span class="setup-step-number">4</span>
-                        <div class="setup-step-content">
-                            <div class="setup-step-heading">
-                                <div>
-                                    <h3>业务知识</h3>
-                                    <p>可选。补充接口文档中没有表达的业务规则和测试约束。</p>
-                                </div>
-                            </div>
-                            <div class="file-field">
-                                <input id="document-file" name="documentFile" type="file"
-                               accept=".md,.markdown,.txt,.pdf,.yaml,.yml">
-                        <label for="document-file">
-                            <span class="upload-icon">＋</span>
-                                    <span><strong id="document-file-name">选择业务文档（可选）</strong>
-                            <small>Markdown / TXT / PDF / YAML · 最大 10 MB</small>
-                                    </span>
-                        </label>
-                            </div>
-                        </div>
-                    </section>
+          <div class="nav-item" data-view="governance">
+            <span class="nav-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            </span>
+            <span>出站安全策略</span>
+          </div>
 
-                    <div class="setup-submit">
-                        <p>提交后将依次创建项目、保存环境、解析接口；如有业务文档则同时索引。</p>
-                        <button id="workspace-submit-button" class="primary-button" type="submit">
-                            保存全部配置
-                        </button>
-                    </div>
-                </form>
-            </article>
+          <div class="nav-item" data-view="knowledge">
+            <span class="nav-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+            </span>
+            <span>业务知识库</span>
+          </div>
+        </div>
 
-            <article id="current-project-summary" class="panel current-project-panel hidden">
-                <div class="panel-heading">
-                    <div>
-                        <span class="section-index">当前</span>
-                        <h3 id="current-project-name">尚未选择项目</h3>
-                    </div>
-                    <span id="environment-count" class="count-pill">0 个环境</span>
-                </div>
-                <div class="asset-summary-grid">
-                    <div>
-                        <strong>执行环境</strong>
-                        <div id="environment-list" class="summary-list">尚未配置</div>
-                    </div>
-                    <div>
-                        <strong>接口目录</strong>
-                        <p id="openapi-state">尚未载入</p>
-                    </div>
-                    <div>
-                        <strong>业务知识</strong>
-                        <div id="document-list" class="summary-list">暂无文档</div>
-                    </div>
-                </div>
-            </article>
-        </section>
+        <div style="padding: 10px; font-size: 11px; color: var(--text-muted); border-top: 1px solid var(--border-subtle); text-align: center;">
+          DocHelper v1.0
+        </div>
+      </nav>
 
-        <section class="view" data-view="agent">
-            <div class="section-intro">
-                <div>
-                    <p class="eyebrow">AGENT LAB</p>
-                    <h2>自然语言测试任务</h2>
-                    <p>实时观察检索、规划、工具执行、确认与报告生成轨迹。</p>
-                </div>
-                <span class="stage-badge live-badge"><i></i> Live</span>
-            </div>
+      <!-- Dynamic View Container -->
+      <main id="main-content" role="main"></main>
+    </div>
+  </div>
 
-            <div class="agent-layout">
-                <article class="panel composer-panel">
-                    <form id="task-form" class="form-stack">
-                        <div class="agent-resource-bar">
-                            <div>
-                                <strong>当前测试资料</strong>
-                                <small id="agent-resource-summary">等待读取项目资料</small>
-                            </div>
-                            <button id="toggle-agent-assets" class="secondary-button" type="button">
-                                查看资料
-                            </button>
-                        </div>
-                        <div id="agent-assets-panel" class="agent-assets-panel hidden">
-                            <div class="agent-assets-section">
-                                <strong>已上传文件</strong>
-                                <div id="agent-file-list" class="agent-file-list"></div>
-                            </div>
-                            <div class="agent-assets-section">
-                                <strong>已解析接口</strong>
-                                <div id="agent-endpoint-list" class="agent-endpoint-list"></div>
-                            </div>
-                        </div>
-                        <label>
-                            <span>执行环境</span>
-                            <select id="task-environment" name="environmentId" required>
-                                <option value="">请先配置环境</option>
-                            </select>
-                        </label>
-                        <label>
-                            <span>测试目标</span>
-                            <textarea id="task-goal" name="goal" rows="5" required
-                                      maxlength="2000"
-                                      placeholder="例如：登录系统后查询当前用户，并验证账号状态为启用"></textarea>
-                        </label>
-                        <details class="advanced-box">
-                            <summary>Stub 强类型计划 <span>可选</span></summary>
-                            <p>无 API Key 时可提供 ExecutionStepRequest JSON 数组，稳定复现多接口链路。</p>
-                            <textarea id="plan-hint" name="planHint" rows="10"
-                                      spellcheck="false"
-                                      placeholder='[{"name":"健康检查","method":"GET","path":"/health","assertions":[{"type":"STATUS_CODE","expectedValue":200}]}]'></textarea>
-                        </details>
-                        <button class="primary-button wide launch-button" type="submit">
-                            <span>✦</span> 启动 Agent
-                        </button>
-                    </form>
-                    <details class="agent-history-box">
-                        <summary>历史任务 <span id="agent-history-count">0 条</span></summary>
-                        <div id="task-list" class="task-list empty-state">当前项目暂无任务</div>
-                    </details>
-                </article>
+  <!-- Unified Toast Notification Anchor -->
+  <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
 
-                <article class="panel plan-panel">
-                    <div class="panel-heading">
-                        <div>
-                            <span class="section-index">Plan</span>
-                            <h3>测试计划</h3>
-                        </div>
-                        <span id="plan-progress" class="count-pill">等待生成</span>
-                    </div>
-                    <div id="test-plan" class="test-plan empty-state">
-                        输入测试目标并启动 Agent 后，这里会显示模型生成的步骤及实时执行结果。
-                    </div>
-                </article>
-
-                <article class="panel trace-panel">
-                    <div class="trace-header">
-                        <div>
-                            <span id="trace-status" class="status-badge neutral">IDLE</span>
-                            <h3 id="trace-title">选择一个任务查看执行轨迹</h3>
-                            <small id="trace-meta">SSE 尚未连接</small>
-                        </div>
-                        <div class="trace-actions">
-                            <button id="cancel-task" class="danger-button hidden">取消任务</button>
-                            <button id="toggle-trace" class="secondary-button" type="button">收起轨迹</button>
-                        </div>
-                    </div>
-                    <div id="trace-error" class="trace-error hidden"></div>
-                    <div id="confirmation-box" class="confirmation-box hidden">
-                        <div class="confirmation-info">
-                            <span class="warning-icon">⚠</span>
-                            <div>
-                                <strong>需要人工确认危险操作</strong>
-                                <p id="confirmation-copy">Agent 计划执行 DELETE 请求。</p>
-                            </div>
-                        </div>
-                        <div class="confirmation-actions">
-                            <button id="modify-plan-toggle" class="secondary-button" type="button">
-                                ✎ 对话修改计划
-                            </button>
-                            <button id="reject-confirmation" class="ghost-button" type="button">拒绝</button>
-                            <button id="approve-confirmation" class="danger-solid-button" type="button">确认执行</button>
-                        </div>
-                    </div>
-
-                    <div id="plan-modify-drawer" class="plan-modify-drawer hidden">
-                        <div class="modify-drawer-header">
-                            <div class="modify-drawer-title">
-                                <strong>多轮对话修改计划</strong>
-                                <span id="modify-count-badge" class="count-pill">还可修改 3 次</span>
-                            </div>
-                            <button id="close-modify-drawer" class="icon-button" type="button" title="收起">✕</button>
-                        </div>
-                        <p class="modify-drawer-tip">输入自然语言指令（如“将分页参数改为 20”、“补充 Authorization 头”），由模型重构执行计划：</p>
-                        <div class="modify-quick-chips">
-                            <button class="chip-button" type="button" data-chip="调整断言状态码为 201">调整状态码 201</button>
-                            <button class="chip-button" type="button" data-chip="补充 Authorization 请求头">补充 Auth 请求头</button>
-                            <button class="chip-button" type="button" data-chip="将请求方法改为 GET">改为 GET 请求</button>
-                            <button class="chip-button" type="button" data-chip="将请求体中的分页参数 pageSize 改为 20">分页 pageSize=20</button>
-                        </div>
-                        <form id="plan-modify-form" class="modify-form">
-                            <textarea id="modify-instruction-input" name="instruction" rows="3" required maxlength="2000"
-                                      placeholder="请输入您的计划调整要求…"></textarea>
-                            <div class="modify-form-actions">
-                                <span id="modify-status-text" class="modify-status-text"></span>
-                                <button id="submit-modify-btn" class="primary-button" type="submit">
-                                    <span>✦</span> 发送修改指令
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                    <div id="trace-list" class="timeline empty-state">
-                        启动或选择任务后，这里将显示持久化事件流
-                    </div>
-                    <div id="tool-drawer" class="tool-drawer"></div>
-                </article>
-            </div>
-        </section>
-
-        <section class="view" data-view="reports">
-            <div class="section-intro">
-                <div>
-                    <p class="eyebrow">EVIDENCE</p>
-                    <h2>测试报告</h2>
-                    <p>每份报告关联检索证据、工具审计与脱敏后的原始请求响应。</p>
-                </div>
-                <div class="report-top-actions">
-                    <button id="export-markdown-btn" class="secondary-button hidden" type="button" title="一键复制 Markdown 报告">
-                        📋 复制 Markdown
-                    </button>
-                    <button id="export-junit-btn" class="secondary-button hidden" type="button" title="导出标准 JUnit XML">
-                        ⇩ 下载 JUnit XML
-                    </button>
-                    <button id="reload-reports" class="secondary-button">刷新报告</button>
-                </div>
-            </div>
-
-            <div class="report-layout">
-                <article class="panel report-list-panel">
-                    <div id="report-list" class="report-list empty-state">当前项目暂无报告</div>
-                </article>
-                <article class="panel report-detail-panel">
-                    <div id="report-detail" class="report-placeholder">
-                        <div class="report-placeholder-mark">▤</div>
-                        <h3>选择一份报告</h3>
-                        <p>查看指标、RAG 证据和每一步脱敏请求响应。</p>
-                    </div>
-                </article>
-            </div>
-        </section>
-    </main>
-</div>
-<script src="/js/app.js" defer></script>
+  <!-- Main ES Module Script -->
+  <script type="module" src="js/app.js"></script>
 </body>
 </html>

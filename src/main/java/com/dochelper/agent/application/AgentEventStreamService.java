@@ -59,6 +59,7 @@ public class AgentEventStreamService {
         }
         AgentTaskResponse task = taskService.get(projectId, taskId);
         boolean terminal = "SUCCEEDED".equals(task.status())
+                || "NEEDS_REVIEW".equals(task.status())
                 || "FAILED".equals(task.status())
                 || "CANCELLED".equals(task.status());
         return new PollBatch(events, terminal);
