@@ -20,5 +20,9 @@ public interface ContractResultRepository {
 
     Optional<FailureReplaySample> findReplay(Long projectId, Long replayId);
 
+    List<FailureReplaySample> findReplays(Long projectId, Long executionId, com.dochelper.common.api.HistoryQuery query);
+
+    long countReplays(Long projectId, Long executionId, String escapedQuery);
+
     void saveCoverage(TestRunCoverage coverage);
 }

@@ -16,4 +16,7 @@ public interface SystemSettingRepository {
      * @return 系统设置
      */
     Optional<SystemSetting> findByKey(String key);
+
+    /** 按唯一配置键新增或覆盖设置。 */
+    void save(String key, String value, String description);
 }

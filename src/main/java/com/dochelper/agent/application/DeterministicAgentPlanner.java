@@ -13,7 +13,6 @@ import com.dochelper.executor.api.dto.ExecutionStepRequest;
 import com.dochelper.executor.api.dto.ResponseAssertionRequest;
 import com.dochelper.executor.domain.AssertionType;
 import com.dochelper.openapi.domain.ApiEndpoint;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 /**
@@ -23,7 +22,6 @@ import org.springframework.stereotype.Component;
  * 中选择与目标最相关且无需路径变量的接口，保证本地开发仍可验证完整状态流转。</p>
  */
 @Component
-@Profile("stub")
 public class DeterministicAgentPlanner implements AgentPlanner {
 
     @Override

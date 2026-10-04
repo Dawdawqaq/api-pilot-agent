@@ -18,7 +18,7 @@ import com.dochelper.project.exception.ProjectErrorCode;
 import com.dochelper.retrieval.domain.RetrievalResult;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
-import org.springframework.ai.vectorstore.VectorStoreRetriever;
+import com.dochelper.knowledge.application.KnowledgeIndexService;
 import org.springframework.stereotype.Service;
 
 /**
@@ -29,7 +29,7 @@ public class HybridRetrievalService {
 
     private final KnowledgeRepository repository;
     private final ApiProjectRepository projectRepository;
-    private final VectorStoreRetriever vectorRetriever;
+    private final KnowledgeIndexService vectorRetriever;
     private final KeywordTokenizer tokenizer;
     private final KnowledgeProperties properties;
     @org.springframework.beans.factory.annotation.Value("${dochelper.knowledge.enabled:true}")
@@ -38,7 +38,7 @@ public class HybridRetrievalService {
     public HybridRetrievalService(
             KnowledgeRepository repository,
             ApiProjectRepository projectRepository,
-            @org.springframework.lang.Nullable VectorStoreRetriever vectorRetriever,
+            @org.springframework.lang.Nullable KnowledgeIndexService vectorRetriever,
             KeywordTokenizer tokenizer,
             KnowledgeProperties properties
     ) {
@@ -58,13 +58,17 @@ public class HybridRetrievalService {
         if (!knowledgeEnabled) {
             return List.of();
         }
-        if (vectorRetriever == null) {
+        if (vectorRetriever == null || !vectorRetriever.available()) {
             throw new BusinessException(KnowledgeErrorCode.FEATURE_DISABLED);
         }
+        return vectorRetriever.withIndex(() -> searchIndex(projectId, query, topK));
+    }
+
+    private List<RetrievalResult> searchIndex(Long projectId, String query, int topK) {
         int safeTopK = Math.max(1, Math.min(topK, 20));
         int candidateSize = Math.max(safeTopK, properties.retrievalCandidateSize());
         List<KnowledgeChunk> keywordResults = keywordSearch(projectId, query.trim(), candidateSize);
-        List<Document> vectorResults = vectorRetriever.similaritySearch(SearchRequest.builder()
+        List<Document> vectorResults = vectorRetriever.search(SearchRequest.builder()
                 .query(query.trim())
                 .topK(candidateSize)
                 .similarityThreshold(0.0)

@@ -37,11 +37,7 @@ public class MybatisApiProjectRepository implements ApiProjectRepository {
 
     @Override
     public Optional<ApiProject> findByCode(String code) {
-        return Optional.ofNullable(mapper.selectOne(
-                Wrappers.<ApiProjectEntity>lambdaQuery()
-                        .eq(ApiProjectEntity::getProjectCode, code)
-                        .last("LIMIT 1")
-        )).map(this::toDomain);
+        return Optional.ofNullable(mapper.findByCodeIncludingRecycled(code)).map(this::toDomain);
     }
 
     @Override

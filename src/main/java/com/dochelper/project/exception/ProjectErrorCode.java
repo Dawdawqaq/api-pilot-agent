@@ -10,6 +10,8 @@ public enum ProjectErrorCode implements ErrorCode {
 
     PROJECT_NOT_FOUND("PROJECT_404_001", "被测项目不存在", HttpStatus.NOT_FOUND),
     PROJECT_CODE_CONFLICT("PROJECT_409_001", "项目编码已存在", HttpStatus.CONFLICT),
+    PROJECT_ARCHIVED("PROJECT_409_003", "项目已归档，请先启用后再创建或执行测试", HttpStatus.CONFLICT),
+    PROJECT_BUSY("PROJECT_409_004", "项目仍有进行中的任务，请结束任务后再归档或移入回收站", HttpStatus.CONFLICT),
     ENVIRONMENT_NOT_FOUND("PROJECT_404_002", "项目环境不存在", HttpStatus.NOT_FOUND),
     ENVIRONMENT_NAME_CONFLICT("PROJECT_409_002", "项目环境名称已存在", HttpStatus.CONFLICT),
     INVALID_BASE_URL("PROJECT_400_001", "Base URL 必须是合法的 HTTP 或 HTTPS 地址", HttpStatus.BAD_REQUEST),

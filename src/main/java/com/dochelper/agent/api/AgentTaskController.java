@@ -1,5 +1,9 @@
 package com.dochelper.agent.api;
 
+import com.dochelper.common.api.CursorPage;
+
+import com.dochelper.common.api.HistoryQuery;
+
 import java.util.List;
 
 import com.dochelper.agent.api.dto.ConfirmationDecisionRequest;
@@ -80,11 +84,18 @@ public class AgentTaskController {
                 .map(ApiResponse::success);
     }
 
-    /**
-     * 查询单个任务详情。
-     *
-     * <p>GET /api/v1/projects/{projectId}/agent-tasks/{taskId}</p>
-     */
+    /** GET /history，支持按目标搜索及按主键游标继续读取，不改变旧列表契约。 */
+    @GetMapping("/history")
+    public Mono<ApiResponse<CursorPage<AgentTaskResponse>>> history(
+            @PathVariable Long projectId,
+            @RequestParam(defaultValue = "20") int limit,
+            @RequestParam(required = false) Long beforeId,
+            @RequestParam(defaultValue = "") String query) {
+        var search = new HistoryQuery(limit, beforeId, query);
+        return blockingExecutor.execute(() -> service.history(projectId, search)).map(ApiResponse::success);
+    }
+
+    /** 查询单个任务详情：GET /api/v1/projects/{projectId}/agent-tasks/{taskId}。 */
     @GetMapping("/{taskId}")
     public Mono<ApiResponse<AgentTaskResponse>> get(
             @PathVariable Long projectId,

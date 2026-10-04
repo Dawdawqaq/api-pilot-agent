@@ -19,6 +19,9 @@ public interface KnowledgeRepository {
 
     List<KnowledgeDocument> findDocuments(Long projectId);
 
+    /** 包含回收站项目的有效索引文档，使项目恢复后索引仍完整。 */
+    List<KnowledgeDocument> findIndexableDocuments();
+
     void replaceChunks(Long documentId, List<KnowledgeChunk> chunks);
 
     void markIndexed(Long documentId, String title, int chunkCount);

@@ -10,6 +10,9 @@ public interface SecretStore {
 
     String put(String scope, String value, Duration ttl);
 
+    /** 保存长期配置密钥，由配置更新或删除操作负责清理。 */
+    String putPermanent(String scope, String value);
+
     Optional<String> get(String reference);
 
     void delete(String reference);

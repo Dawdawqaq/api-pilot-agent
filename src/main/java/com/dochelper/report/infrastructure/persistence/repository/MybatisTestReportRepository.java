@@ -1,5 +1,7 @@
 package com.dochelper.report.infrastructure.persistence.repository;
 
+import com.dochelper.common.api.HistoryQuery;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -26,6 +28,23 @@ public class MybatisTestReportRepository implements TestReportRepository {
     private final TestReportMapper reportMapper;
     private final TestReportStepMapper stepMapper;
     private final ObjectMapper objectMapper;
+
+    @Override
+    public List<TestReport> findHistory(Long projectId, HistoryQuery query) {
+        return reportMapper.selectList(Wrappers.<TestReportEntity>lambdaQuery()
+                .eq(TestReportEntity::getProjectId, projectId)
+                .like(!query.query().isEmpty(), TestReportEntity::getTitle, query.escapedQuery())
+                .lt(query.beforeId() != null, TestReportEntity::getId, query.beforeId())
+                .orderByDesc(TestReportEntity::getId)
+                .last("LIMIT " + (query.limit() + 1))).stream().map(this::toDomain).toList();
+    }
+
+    @Override
+    public long countHistory(Long projectId, String escapedQuery) {
+        return reportMapper.selectCount(Wrappers.<TestReportEntity>lambdaQuery()
+                .eq(TestReportEntity::getProjectId, projectId)
+                .like(!escapedQuery.isEmpty(), TestReportEntity::getTitle, escapedQuery));
+    }
 
     public MybatisTestReportRepository(
             TestReportMapper reportMapper,

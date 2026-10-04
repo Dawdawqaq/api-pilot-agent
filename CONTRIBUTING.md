@@ -6,6 +6,7 @@
 
 - JDK 21
 - Maven 3.9+
+- Node.js 22（前端开发与本地构建）
 - MySQL 8.x
 - 可选：Qdrant 1.14.x、MinIO
 
@@ -40,9 +41,10 @@ mvn spring-boot:run
 Windows 可以使用仓库中的启动脚本：
 
 ```powershell
-mvn package
-./scripts/start-real-local.ps1 -KeyFile '<密钥文件绝对路径>' -Port 18081
+./scripts/app.ps1 start -Mode Core -Build
 ```
+
+前端开发从 frontend 运行 npm ci / npm run dev；构建 jar 前先 npm run build，静态资源会自动打包。统一启动、日志和备份见 [维护说明](docs/personal-operations.md)，接口见 [API 契约](docs/api.md)。
 
 ## 代码约定
 
@@ -58,6 +60,10 @@ mvn package
 
 ```bash
 mvn test
+cd frontend
+npm ci
+npm test
+npm run build
 ```
 
 需要本地 MySQL、Qdrant 与 MinIO 的集成测试：

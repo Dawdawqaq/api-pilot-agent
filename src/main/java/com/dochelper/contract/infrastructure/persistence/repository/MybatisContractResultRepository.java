@@ -87,6 +87,28 @@ public class MybatisContractResultRepository implements ContractResultRepository
         coverageMapper.insert(entity);
     }
 
+    @Override
+    public List<FailureReplaySample> findReplays(Long projectId, Long executionId,
+            com.dochelper.common.api.HistoryQuery query) {
+        return replayMapper.selectList(replayQuery(projectId, executionId, query.escapedQuery())
+                .lt(query.beforeId() != null, FailureReplaySampleEntity::getId, query.beforeId())
+                .orderByDesc(FailureReplaySampleEntity::getId).last("LIMIT " + (query.limit() + 1)))
+                .stream().map(this::toDomain).toList();
+    }
+
+    @Override
+    public long countReplays(Long projectId, Long executionId, String escapedQuery) {
+        return replayMapper.selectCount(replayQuery(projectId, executionId, escapedQuery));
+    }
+
+    private com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<FailureReplaySampleEntity>
+            replayQuery(Long projectId, Long executionId, String escapedQuery) {
+        return Wrappers.<FailureReplaySampleEntity>lambdaQuery()
+                .eq(FailureReplaySampleEntity::getProjectId, projectId)
+                .eq(executionId != null, FailureReplaySampleEntity::getExecutionId, executionId)
+                .like(!escapedQuery.isEmpty(), FailureReplaySampleEntity::getErrorSummary, escapedQuery);
+    }
+
     private ContractOperationResultEntity toEntity(ContractOperationResult value) {
         ContractOperationResultEntity entity = new ContractOperationResultEntity();
         entity.setId(value.id());

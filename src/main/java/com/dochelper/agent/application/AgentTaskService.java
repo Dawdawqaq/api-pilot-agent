@@ -1,5 +1,9 @@
 package com.dochelper.agent.application;
 
+import com.dochelper.common.api.CursorPage;
+
+import com.dochelper.common.api.HistoryQuery;
+
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -99,7 +103,11 @@ public class AgentTaskService {
      * 创建任务并异步启动 Agent。
      */
     public AgentTaskResponse create(Long projectId, CreateAgentTaskRequest request) {
-        requireProject(projectId);
+        var project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new BusinessException(ProjectErrorCode.PROJECT_NOT_FOUND));
+        if (project.status() == com.dochelper.project.domain.ProjectStatus.ARCHIVED) {
+            throw new BusinessException(ProjectErrorCode.PROJECT_ARCHIVED);
+        }
         ProjectEnvironment environment = requireEnvironment(projectId, request.environmentId());
         validateRequest(request);
         return admissionService.admit(projectId, () -> createAdmitted(projectId, environment, request));
@@ -197,6 +205,16 @@ public class AgentTaskService {
         return repository.findTasks(projectId, limit).stream()
                 .map(this::detail)
                 .toList();
+    }
+
+    public CursorPage<AgentTaskResponse> history(
+            Long projectId, HistoryQuery query) {
+        requireProject(projectId);
+        // 历史列表只返回摘要，执行证据在用户选择任务后按需读取。
+        var rows = repository.findHistory(projectId, query).stream()
+                .map(task -> AgentTaskResponse.from(task, null, List.of(), List.of())).toList();
+        return CursorPage.from(rows,
+                repository.countHistory(projectId, query.escapedQuery()), query.limit(), AgentTaskResponse::id);
     }
 
     public List<AgentTaskEventResponse> events(

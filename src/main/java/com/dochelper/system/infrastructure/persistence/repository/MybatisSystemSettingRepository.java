@@ -3,6 +3,7 @@ package com.dochelper.system.infrastructure.persistence.repository;
 import java.util.Optional;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.dochelper.system.domain.model.SystemSetting;
 import com.dochelper.system.domain.repository.SystemSettingRepository;
 import com.dochelper.system.infrastructure.persistence.entity.SystemSettingEntity;
@@ -44,5 +45,10 @@ public class MybatisSystemSettingRepository implements SystemSettingRepository {
                 entity.getDescription(),
                 entity.getUpdatedAt()
         );
+    }
+
+    @Override
+    public void save(String key, String value, String description) {
+        systemSettingMapper.upsert(IdWorker.getId(), key, value, description);
     }
 }

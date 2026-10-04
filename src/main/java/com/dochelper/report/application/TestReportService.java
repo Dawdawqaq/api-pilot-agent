@@ -1,5 +1,9 @@
 package com.dochelper.report.application;
 
+import com.dochelper.common.api.CursorPage;
+
+import com.dochelper.common.api.HistoryQuery;
+
 import java.time.LocalDateTime;
 import java.time.Duration;
 import java.util.List;
@@ -185,6 +189,13 @@ public class TestReportService {
     public List<TestReport> list(Long projectId, int limit) {
         requireProject(projectId);
         return reportRepository.findByProjectId(projectId, limit);
+    }
+
+    public CursorPage<TestReport> history(
+            Long projectId, HistoryQuery query) {
+        requireProject(projectId);
+        return CursorPage.from(reportRepository.findHistory(projectId, query),
+                reportRepository.countHistory(projectId, query.escapedQuery()), query.limit(), TestReport::id);
     }
 
     public TestReport get(Long projectId, Long reportId) {

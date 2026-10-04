@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 滚动条美化 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.4);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(156, 163, 175, 0.7);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background-color: rgba(113, 113, 122, 0.4);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(113, 113, 122, 0.7);
+}
+
+/* 焦点环无障碍通用样式 */
+.focus-ring {
+  @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-900;
+}
+
+/* ===== Quiet Ledger 风格原语：新页面一律复用，不要再手写一长串 utility ===== */
+@layer components {
+  /* 卡片：1px 细边框、无阴影、12px 圆角 */
+  .card { @apply rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900; }
+  /* 状态：圆点 + 文字，不用实心色块；颜色只用于状态 */
+  .status { @apply inline-flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-300; }
+  .status::before { content: ''; @apply w-1.5 h-1.5 rounded-full bg-zinc-400; }
+  .status-ok::before { @apply bg-emerald-500; }
+  .status-warn::before { @apply bg-amber-500; }
+  .status-err::before { @apply bg-red-500; }
+  .status-busy::before { @apply bg-brand-500 animate-pulse; }
+  /* 元信息：小号灰字，等宽数字 */
+  .meta { @apply text-xs text-zinc-500 dark:text-zinc-400 tabular-nums; }
+  /* 按钮：主按钮仅用于页面唯一主操作 */
+  .btn { @apply inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors focus-ring disabled:opacity-40; }
+  .btn-primary { @apply btn border-transparent bg-zinc-900 text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300; }
+}

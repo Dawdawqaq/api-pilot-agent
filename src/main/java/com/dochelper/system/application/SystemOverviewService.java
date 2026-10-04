@@ -4,7 +4,7 @@ import com.dochelper.common.exception.BusinessException;
 import com.dochelper.common.exception.CommonErrorCode;
 import com.dochelper.infrastructure.config.InfrastructureEndpointProperties;
 import com.dochelper.infrastructure.config.ObjectStorageProperties;
-import com.dochelper.model.ModelProviderProperties;
+import com.dochelper.model.application.LlmConfigurationService;
 import com.dochelper.system.api.vo.InfrastructureOverviewResponse;
 import com.dochelper.system.domain.model.SystemSetting;
 import com.dochelper.system.domain.repository.SystemSettingRepository;
@@ -24,7 +24,8 @@ public class SystemOverviewService {
     private final SystemSettingRepository systemSettingRepository;
     private final InfrastructureEndpointProperties infrastructureProperties;
     private final ObjectStorageProperties objectStorageProperties;
-    private final ModelProviderProperties modelProperties;
+    private final LlmConfigurationService modelConfiguration;
+    private final com.dochelper.knowledge.application.KnowledgeIndexService knowledgeIndex;
     @Value("${dochelper.knowledge.enabled:true}")
     private boolean knowledgeEnabled = true;
 
@@ -35,20 +36,22 @@ public class SystemOverviewService {
      * @param systemSettingRepository 系统设置仓储
      * @param infrastructureProperties 基础设施配置
      * @param objectStorageProperties 对象存储配置
-     * @param modelProperties 模型服务配置
+     * @param modelConfiguration 模型配置服务
      */
     public SystemOverviewService(
             @Value("${spring.application.name}") String applicationName,
             SystemSettingRepository systemSettingRepository,
             InfrastructureEndpointProperties infrastructureProperties,
             ObjectStorageProperties objectStorageProperties,
-            ModelProviderProperties modelProperties
+            LlmConfigurationService modelConfiguration,
+            com.dochelper.knowledge.application.KnowledgeIndexService knowledgeIndex
     ) {
         this.applicationName = applicationName;
         this.systemSettingRepository = systemSettingRepository;
         this.infrastructureProperties = infrastructureProperties;
         this.objectStorageProperties = objectStorageProperties;
-        this.modelProperties = modelProperties;
+        this.modelConfiguration = modelConfiguration;
+        this.knowledgeIndex = knowledgeIndex;
     }
 
     /**
@@ -64,13 +67,14 @@ public class SystemOverviewService {
                         "数据库结构版本记录不存在"
                 ));
 
+        var model = modelConfiguration.getConfiguration();
         return new InfrastructureOverviewResponse(
                 applicationName,
                 schemaVersion.value(),
-                infrastructureProperties.qdrantHealthEnabled() ? infrastructureProperties.qdrantCollection() : null,
+                infrastructureProperties.qdrantHealthEnabled() ? knowledgeIndex.activeCollection() : null,
                 objectStorageProperties.enabled() ? objectStorageProperties.bucket() : null,
                 knowledgeEnabled,
-                modelProperties.chatModel()
+                model.activeModel(), model.mode(), model.provider()
         );
     }
 }

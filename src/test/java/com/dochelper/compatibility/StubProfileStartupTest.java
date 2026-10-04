@@ -2,6 +2,8 @@ package com.dochelper.compatibility;
 
 import com.dochelper.compatibility.stub.StubAiConfiguration;
 import com.dochelper.model.ModelProviderProperties;
+import com.dochelper.model.RuntimeChatModel;
+import com.dochelper.model.RuntimeModelProvider;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -11,6 +13,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Import;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 /**
  * 验证无真实 API Key 时的 Stub Profile 可以完整启动。
@@ -24,6 +27,7 @@ class StubProfileStartupTest {
     void shouldStartWithoutRealApiKey() {
         new ApplicationContextRunner()
                 .withUserConfiguration(StubTestConfiguration.class)
+                .withBean(RuntimeModelProvider.class, () -> mock(RuntimeModelProvider.class))
                 .withPropertyValues(
                         "spring.profiles.active=stub",
                         "dochelper.ai.base-url=https://example.invalid",
@@ -44,11 +48,11 @@ class StubProfileStartupTest {
     }
 
     /**
-     * 仅装配 Stub 模型及其配置属性，避免兼容性测试加载业务基础设施。
+     * 装配统一对话入口与 Stub 向量模型，运行时配置存储由模拟依赖隔离。
      */
     @TestConfiguration(proxyBeanMethods = false)
     @EnableConfigurationProperties(ModelProviderProperties.class)
-    @Import(StubAiConfiguration.class)
+    @Import({StubAiConfiguration.class, RuntimeChatModel.class})
     static class StubTestConfiguration {
     }
 }

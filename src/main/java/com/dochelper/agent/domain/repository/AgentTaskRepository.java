@@ -1,5 +1,7 @@
 package com.dochelper.agent.domain.repository;
 
+import com.dochelper.common.api.HistoryQuery;
+
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -31,6 +33,10 @@ public interface AgentTaskRepository {
     Optional<AgentTask> findTask(Long projectId, Long taskId);
 
     List<AgentTask> findTasks(Long projectId, int limit);
+
+    List<AgentTask> findHistory(Long projectId, HistoryQuery query);
+
+    long countHistory(Long projectId, String escapedQuery);
 
     long countActiveTasks();
 

@@ -1,5 +1,9 @@
 package com.dochelper.report.api;
 
+import com.dochelper.common.api.CursorPage;
+
+import com.dochelper.common.api.HistoryQuery;
+
 import java.util.List;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -54,11 +58,23 @@ public class TestReportController {
                 .map(ApiResponse::success);
     }
 
-    /**
-     * 查询包含脱敏请求响应的报告详情。
-     *
-     * <p>GET /api/v1/projects/{projectId}/reports/{reportId}</p>
-     */
+    /** GET /history，返回搜索结果总数与下一页游标，详情仍由原详情接口提供。 */
+    @GetMapping("/history")
+    public Mono<ApiResponse<CursorPage<TestReportResponse>>> history(
+            @PathVariable Long projectId,
+            @RequestParam(defaultValue = "20") int limit,
+            @RequestParam(required = false) Long beforeId,
+            @RequestParam(defaultValue = "") String query) {
+        var search = new HistoryQuery(limit, beforeId, query);
+        return blockingExecutor.execute(() -> {
+            var page = service.history(projectId, search);
+            var items = page.items().stream()
+                    .map(report -> TestReportResponse.from(report, List.of(), objectMapper)).toList();
+            return new CursorPage<>(items, page.total(), page.hasMore(), page.nextCursor());
+        }).map(ApiResponse::success);
+    }
+
+    /** 查询包含脱敏请求响应的报告详情：GET /api/v1/projects/{projectId}/reports/{reportId}。 */
     @GetMapping("/{reportId}")
     public Mono<ApiResponse<TestReportResponse>> get(
             @PathVariable Long projectId,

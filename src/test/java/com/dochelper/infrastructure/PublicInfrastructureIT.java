@@ -54,10 +54,6 @@ import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMoc
         classes = DocHelperApplication.class,
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
-                "dochelper.auth.bootstrap-username=integration-owner",
-                "dochelper.auth.bootstrap-password=Integration-Test-Password-2026!",
-                "dochelper.auth.bootstrap-display-name=集成测试 Owner",
-                "dochelper.auth.jwt-secret=integration-jwt-secret",
                 "dochelper.secret-store.master-key=integration-secret-store-key"
         }
 )

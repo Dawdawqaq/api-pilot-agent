@@ -27,13 +27,16 @@ public class ProjectApplicationService {
 
     private final ApiProjectRepository projectRepository;
     private final ProjectEnvironmentRepository environmentRepository;
+    private final com.dochelper.agent.domain.repository.AgentTaskRepository tasks;
 
     public ProjectApplicationService(
             ApiProjectRepository projectRepository,
-            ProjectEnvironmentRepository environmentRepository
+            ProjectEnvironmentRepository environmentRepository,
+            com.dochelper.agent.domain.repository.AgentTaskRepository tasks
     ) {
         this.projectRepository = projectRepository;
         this.environmentRepository = environmentRepository;
+        this.tasks = tasks;
     }
 
     /**
@@ -74,6 +77,9 @@ public class ProjectApplicationService {
     @Transactional
     public ApiProject updateProject(Long projectId, UpdateProjectRequest request) {
         ApiProject current = requireProject(projectId);
+        if (request.status() == ProjectStatus.ARCHIVED && tasks.countActiveTasks(projectId) > 0) {
+            throw new BusinessException(ProjectErrorCode.PROJECT_BUSY);
+        }
         projectRepository.update(new ApiProject(
                 current.id(),
                 current.code(),
@@ -90,6 +96,7 @@ public class ProjectApplicationService {
     @Transactional
     public boolean deleteProject(Long projectId) {
         requireProject(projectId);
+        if (tasks.countActiveTasks(projectId) > 0) throw new BusinessException(ProjectErrorCode.PROJECT_BUSY);
         projectRepository.deleteById(projectId);
         return true;
     }

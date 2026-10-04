@@ -1,5 +1,7 @@
 package com.dochelper.agent.infrastructure.persistence.repository;
 
+import com.dochelper.common.api.HistoryQuery;
+
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -55,6 +57,23 @@ public class MybatisAgentTaskRepository implements AgentTaskRepository {
     private final AgentConfirmationMapper confirmationMapper;
     private final AgentMessageMapper messageMapper;
     private final ObjectMapper objectMapper;
+
+    @Override
+    public List<AgentTask> findHistory(Long projectId, HistoryQuery query) {
+        return taskMapper.selectList(Wrappers.<AgentTaskEntity>lambdaQuery()
+                .eq(AgentTaskEntity::getProjectId, projectId)
+                .like(!query.query().isEmpty(), AgentTaskEntity::getGoal, query.escapedQuery())
+                .lt(query.beforeId() != null, AgentTaskEntity::getId, query.beforeId())
+                .orderByDesc(AgentTaskEntity::getId)
+                .last("LIMIT " + (query.limit() + 1))).stream().map(this::toDomain).toList();
+    }
+
+    @Override
+    public long countHistory(Long projectId, String escapedQuery) {
+        return taskMapper.selectCount(Wrappers.<AgentTaskEntity>lambdaQuery()
+                .eq(AgentTaskEntity::getProjectId, projectId)
+                .like(!escapedQuery.isEmpty(), AgentTaskEntity::getGoal, escapedQuery));
+    }
 
     public MybatisAgentTaskRepository(
             AgentConversationMapper conversationMapper,

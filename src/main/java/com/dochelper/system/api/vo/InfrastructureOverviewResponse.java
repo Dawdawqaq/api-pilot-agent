@@ -16,6 +16,8 @@ public record InfrastructureOverviewResponse(
         String qdrantCollection,
         String objectStorageBucket,
         boolean knowledgeEnabled,
-        String chatModel
+        String chatModel,
+        String modelMode,
+        String modelProvider
 ) {
 }

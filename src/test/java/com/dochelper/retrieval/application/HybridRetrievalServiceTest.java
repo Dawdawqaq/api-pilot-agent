@@ -12,7 +12,7 @@ import com.dochelper.project.domain.repository.ApiProjectRepository;
 import com.dochelper.retrieval.domain.RetrievalResult;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.document.Document;
-import org.springframework.ai.vectorstore.VectorStoreRetriever;
+import com.dochelper.knowledge.application.KnowledgeIndexService;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -30,7 +30,7 @@ class HybridRetrievalServiceTest {
         HybridRetrievalService service = new HybridRetrievalService(
                 repository,
                 mock(ApiProjectRepository.class),
-                mock(VectorStoreRetriever.class),
+                mock(KnowledgeIndexService.class),
                 new KeywordTokenizer(),
                 new KnowledgeProperties(10 * 1024 * 1024, 500_000, 800, 120, 20, 60)
         );

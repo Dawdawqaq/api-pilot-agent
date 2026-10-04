@@ -25,14 +25,10 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.context.annotation.Profile;
-import org.springframework.stereotype.Component;
 
 /**
- * 真实模型 Profile 使用的结构化规划器。
+ * 使用本轮模型快照生成结构化计划。
  */
-@Component
-@Profile("!stub")
 public class ModelBackedAgentPlanner implements AgentPlanner {
 
     private final ChatModel chatModel;
@@ -43,6 +39,7 @@ public class ModelBackedAgentPlanner implements AgentPlanner {
     private final ModelDataPolicyService modelDataPolicyService;
     private final AgentProperties agentProperties;
     private final PlanningSchemaResolver schemaResolver;
+    private final String provider;
 
     public ModelBackedAgentPlanner(
             ChatModel chatModel,
@@ -52,7 +49,8 @@ public class ModelBackedAgentPlanner implements AgentPlanner {
             ModelProviderProperties modelProperties,
             ModelDataPolicyService modelDataPolicyService,
             AgentProperties agentProperties,
-            PlanningSchemaResolver schemaResolver
+            PlanningSchemaResolver schemaResolver,
+            String provider
     ) {
         this.chatModel = chatModel;
         this.objectMapper = objectMapper;
@@ -62,6 +60,7 @@ public class ModelBackedAgentPlanner implements AgentPlanner {
         this.modelDataPolicyService = modelDataPolicyService;
         this.agentProperties = agentProperties;
         this.schemaResolver = schemaResolver;
+        this.provider = provider;
     }
 
     @Override
@@ -246,10 +245,10 @@ public class ModelBackedAgentPlanner implements AgentPlanner {
                         Duration.ofNanos(System.nanoTime() - startNanos).toMillis(),
                         "FAILED",
                         "MODEL_CALL_FAILED",
-                        safeMessage(exception.getMessage()),
+                        "模型服务调用失败，请检查 LLM API 配置",
                         startedAt
                 );
-                throw exception;
+                throw new BusinessException(AgentErrorCode.PLANNING_FAILED, "模型服务调用失败，请检查 LLM API 配置");
             }
             String content = response.getResult().getOutput().getText();
             try {
@@ -308,14 +307,7 @@ public class ModelBackedAgentPlanner implements AgentPlanner {
     }
 
     private String providerName() {
-        String model = modelProperties.chatModel().toLowerCase(java.util.Locale.ROOT);
-        if (model.contains("deepseek")) {
-            return "DEEPSEEK";
-        }
-        if (model.contains("qwen")) {
-            return "DASHSCOPE";
-        }
-        return "OPENAI_COMPATIBLE";
+        return provider;
     }
 
     @Override
@@ -370,7 +362,7 @@ public class ModelBackedAgentPlanner implements AgentPlanner {
             LocalDateTime startedAt
     ) {
         Usage usage = response == null ? null : response.getMetadata().getUsage();
-        String modelName = response == null || response.getMetadata().getModel() == null
+        String modelName = response == null || response.getMetadata().getModel() == null || response.getMetadata().getModel().isBlank()
                 ? modelProperties.chatModel()
                 : response.getMetadata().getModel();
         repository.createModelCall(new AgentModelCall(

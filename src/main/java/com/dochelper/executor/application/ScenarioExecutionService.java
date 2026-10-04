@@ -161,6 +161,9 @@ public class ScenarioExecutionService {
     ) {
         executionCheckpoint.run();
         requireProject(projectId);
+        if (projectRepository.findById(projectId).orElseThrow().status() == com.dochelper.project.domain.ProjectStatus.ARCHIVED) {
+            throw new BusinessException(ProjectErrorCode.PROJECT_ARCHIVED);
+        }
         ProjectEnvironment environment = requireEnvironment(projectId, request.environmentId());
         validateScenario(request);
         validatePlanBeforeExecution(projectId, request, confirmedStepIndexes);

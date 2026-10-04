@@ -59,6 +59,10 @@ public class ContractTestService {
 
     public FailureReplayResponse getReplay(Long projectId, Long replayId) {
         FailureReplaySample sample = requireReplay(projectId, replayId);
+        return toResponse(sample);
+    }
+
+    private FailureReplayResponse toResponse(FailureReplaySample sample) {
         try {
             return new FailureReplayResponse(
                     sample.id(), sample.executionId(), sample.stepIndex(),
@@ -68,6 +72,19 @@ public class ContractTestService {
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("回放样本 JSON 数据损坏", exception);
         }
+    }
+
+    public com.dochelper.common.api.CursorPage<FailureReplayResponse> listReplays(Long projectId,
+            Long executionId, com.dochelper.common.api.HistoryQuery query) {
+        if (executionId != null && executionId <= 0) {
+            throw new BusinessException(com.dochelper.common.exception.CommonErrorCode.INVALID_ARGUMENT,
+                    "执行编号须为正整数");
+        }
+        var rows = resultRepository.findReplays(projectId, executionId, query).stream()
+                .map(this::toResponse).toList();
+        return com.dochelper.common.api.CursorPage.from(rows,
+                resultRepository.countReplays(projectId, executionId, query.escapedQuery()),
+                query.limit(), FailureReplayResponse::id);
     }
 
     public ScenarioExecutionResult replay(

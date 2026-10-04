@@ -22,6 +22,20 @@ import static org.mockito.Mockito.when;
 class DatabaseEncryptedSecretStoreTest {
 
     @Test
+    void shouldRestorePermanentKeyWithSameMasterKeyAfterRestart() {
+        RuntimeSecretMapper mapper = mock(RuntimeSecretMapper.class);
+        AtomicReference<RuntimeSecretEntity> stored = new AtomicReference<>();
+        doAnswer(invocation -> { stored.set(invocation.getArgument(0)); return 1; })
+                .when(mapper).insert(any(RuntimeSecretEntity.class));
+        when(mapper.selectById(any())).thenAnswer(invocation -> stored.get());
+        var properties = new SecretStoreProperties("stable-test-master-key");
+        String reference = new DatabaseEncryptedSecretStore(mapper, properties).putPermanent("llm:global:chat", "private-key");
+        assertThat(stored.get().getExpiresAt()).isNull();
+        assertThat(new String(stored.get().getEncryptedValue(), StandardCharsets.UTF_8)).doesNotContain("private-key");
+        assertThat(new DatabaseEncryptedSecretStore(mapper, properties).get(reference)).contains("private-key");
+    }
+
+    @Test
     void shouldPersistCiphertextAndRestoreByOpaqueReference() {
         RuntimeSecretMapper mapper = mock(RuntimeSecretMapper.class);
         AtomicReference<RuntimeSecretEntity> stored = new AtomicReference<>();

@@ -55,6 +55,15 @@ public class ContractTestController {
                 .map(ApiResponse::success);
     }
 
+    @GetMapping("/replays")
+    public Mono<ApiResponse<com.dochelper.common.api.CursorPage<FailureReplayResponse>>> listReplays(
+            @PathVariable Long projectId, @RequestParam(required = false) Long executionId,
+            @RequestParam(defaultValue = "20") int limit, @RequestParam(required = false) Long beforeId,
+            @RequestParam(defaultValue = "") String query) {
+        return blockingExecutor.execute(() -> service.listReplays(projectId, executionId,
+                new com.dochelper.common.api.HistoryQuery(limit, beforeId, query))).map(ApiResponse::success);
+    }
+
     /**
      * POST 回放只读请求；写请求仍会再次进入人工确认策略。
      */

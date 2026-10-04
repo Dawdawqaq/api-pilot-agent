@@ -26,9 +26,16 @@ public class InMemorySecretStore implements SecretStore {
     }
 
     @Override
+    public String putPermanent(String scope, String value) {
+        String reference = "mem:" + UUID.randomUUID();
+        secrets.put(reference, new StoredSecret(value, null));
+        return reference;
+    }
+
+    @Override
     public Optional<String> get(String reference) {
         StoredSecret secret = secrets.get(reference);
-        if (secret == null || Instant.now().isAfter(secret.expiresAt())) {
+        if (secret == null || (secret.expiresAt() != null && Instant.now().isAfter(secret.expiresAt()))) {
             secrets.remove(reference);
             return Optional.empty();
         }

@@ -1,5 +1,7 @@
 package com.dochelper.report.domain.repository;
 
+import com.dochelper.common.api.HistoryQuery;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -18,6 +20,10 @@ public interface TestReportRepository {
     Optional<TestReport> findByProjectAndId(Long projectId, Long reportId);
 
     List<TestReport> findByProjectId(Long projectId, int limit);
+
+    List<TestReport> findHistory(Long projectId, HistoryQuery query);
+
+    long countHistory(Long projectId, String escapedQuery);
 
     List<TestReportStep> findSteps(Long reportId);
 }

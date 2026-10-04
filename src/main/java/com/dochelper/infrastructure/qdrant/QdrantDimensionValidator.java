@@ -27,6 +27,8 @@ public class QdrantDimensionValidator {
     private final ObjectProvider<EmbeddingModel> embeddingModelProvider;
     private final ModelProviderProperties modelProperties;
     private volatile Integer cachedExpectedDimensions;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.dochelper.knowledge.application.KnowledgeIndexService knowledgeIndex;
 
     public QdrantDimensionValidator(
             WebClient.Builder webClientBuilder,
@@ -46,6 +48,7 @@ public class QdrantDimensionValidator {
      * @return 校验诊断结果
      */
     public Mono<DimensionValidationResult> validate() {
+        String collection = knowledgeIndex == null ? this.collection : knowledgeIndex.activeCollection();
         int expected = resolveExpectedDimensions();
         return webClient.get()
                 .uri(uriBuilder -> uriBuilder.pathSegment("collections", collection).build())
@@ -89,7 +92,7 @@ public class QdrantDimensionValidator {
             }
             return Mono.error(new IllegalStateException(
                     "Qdrant 向量维度不匹配错误：" + result.message()
-                            + "。请清空旧集合并重新执行数据索引，或校准 dochelper.ai 配置。"
+                            + "。请通过知识库配置页重建索引，或校准 dochelper.ai 配置。"
             ));
         });
     }
@@ -100,6 +103,7 @@ public class QdrantDimensionValidator {
      * @return 预期向量维度
      */
     public int resolveExpectedDimensions() {
+        if (knowledgeIndex != null && knowledgeIndex.activeDimensions() != null) return knowledgeIndex.activeDimensions();
         if (cachedExpectedDimensions != null) {
             return cachedExpectedDimensions;
         }

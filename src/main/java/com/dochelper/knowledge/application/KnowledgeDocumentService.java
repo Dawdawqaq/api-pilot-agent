@@ -26,7 +26,6 @@ import com.dochelper.project.exception.ProjectErrorCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
-import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
 
 /**
@@ -42,7 +41,7 @@ public class KnowledgeDocumentService {
     private final ObjectStorageGateway storageGateway;
     private final TikaDocumentExtractor extractor;
     private final SectionAwareChunker chunker;
-    private final VectorStore vectorStore;
+    private final KnowledgeIndexService vectorStore;
     private final KnowledgeProperties properties;
 
     public KnowledgeDocumentService(
@@ -51,7 +50,7 @@ public class KnowledgeDocumentService {
             @org.springframework.lang.Nullable ObjectStorageGateway storageGateway,
             TikaDocumentExtractor extractor,
             SectionAwareChunker chunker,
-            @org.springframework.lang.Nullable VectorStore vectorStore,
+            @org.springframework.lang.Nullable KnowledgeIndexService vectorStore,
             KnowledgeProperties properties
     ) {
         this.repository = repository;
@@ -70,6 +69,11 @@ public class KnowledgeDocumentService {
             byte[] content
     ) {
         requireEnabled();
+        return vectorStore.withIndex(() -> doUpload(projectId, fileName, requestContentType, content));
+    }
+
+    private KnowledgeDocument doUpload(Long projectId, String fileName, String requestContentType, byte[] content) {
+        requireEnabled();
         requireProject(projectId);
         validateFile(fileName, content);
         String hash = sha256(content);
@@ -84,6 +88,11 @@ public class KnowledgeDocumentService {
     }
 
     public KnowledgeDocument retry(Long projectId, Long documentId) {
+        requireEnabled();
+        return vectorStore.withIndex(() -> doRetry(projectId, documentId));
+    }
+
+    private KnowledgeDocument doRetry(Long projectId, Long documentId) {
         requireEnabled();
         requireProject(projectId);
         KnowledgeDocument document = requireDocument(projectId, documentId);
@@ -120,6 +129,11 @@ public class KnowledgeDocumentService {
 
     public boolean delete(Long projectId, Long documentId) {
         requireEnabled();
+        return vectorStore.withIndex(() -> doDelete(projectId, documentId));
+    }
+
+    private boolean doDelete(Long projectId, Long documentId) {
+        requireEnabled();
         requireProject(projectId);
         KnowledgeDocument document = requireDocument(projectId, documentId);
         try {
@@ -139,7 +153,7 @@ public class KnowledgeDocumentService {
     private boolean knowledgeEnabled = true;
 
     private void requireEnabled() {
-        if (!knowledgeEnabled || storageGateway == null || vectorStore == null) {
+        if (!knowledgeEnabled || storageGateway == null || vectorStore == null || !vectorStore.available()) {
             throw new BusinessException(KnowledgeErrorCode.FEATURE_DISABLED);
         }
     }

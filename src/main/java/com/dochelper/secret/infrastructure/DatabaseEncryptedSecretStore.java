@@ -55,6 +55,15 @@ public class DatabaseEncryptedSecretStore implements SecretStore {
 
     @Override
     public String put(String scope, String value, Duration ttl) {
+        return store(scope, value, LocalDateTime.now().plus(ttl));
+    }
+
+    @Override
+    public String putPermanent(String scope, String value) {
+        return store(scope, value, null);
+    }
+
+    private String store(String scope, String value, LocalDateTime expiresAt) {
         try {
             String reference = "db:" + UUID.randomUUID();
             byte[] iv = new byte[12];
@@ -67,7 +76,7 @@ public class DatabaseEncryptedSecretStore implements SecretStore {
             entity.setScopeHash(HexFormat.of().formatHex(sha256Bytes(scope)));
             entity.setEncryptedValue(cipher.doFinal(value.getBytes(StandardCharsets.UTF_8)));
             entity.setInitializationVector(iv);
-            entity.setExpiresAt(LocalDateTime.now().plus(ttl));
+            entity.setExpiresAt(expiresAt);
             entity.setCreatedAt(LocalDateTime.now());
             mapper.insert(entity);
             return reference;
@@ -79,7 +88,7 @@ public class DatabaseEncryptedSecretStore implements SecretStore {
     @Override
     public Optional<String> get(String reference) {
         RuntimeSecretEntity entity = mapper.selectById(reference);
-        if (entity == null || LocalDateTime.now().isAfter(entity.getExpiresAt())) {
+        if (entity == null || (entity.getExpiresAt() != null && LocalDateTime.now().isAfter(entity.getExpiresAt()))) {
             if (entity != null) {
                 mapper.deleteById(reference);
             }

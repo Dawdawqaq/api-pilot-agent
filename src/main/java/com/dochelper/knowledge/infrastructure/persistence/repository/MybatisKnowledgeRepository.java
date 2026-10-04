@@ -79,6 +79,13 @@ public class MybatisKnowledgeRepository implements KnowledgeRepository {
     }
 
     @Override
+    public List<KnowledgeDocument> findIndexableDocuments() {
+        return documentMapper.selectList(Wrappers.<KnowledgeDocumentEntity>lambdaQuery()
+                .eq(KnowledgeDocumentEntity::getStatus, DocumentStatus.INDEXED.name())
+                .orderByAsc(KnowledgeDocumentEntity::getId)).stream().map(this::toDomain).toList();
+    }
+
+    @Override
     public void markIndexed(Long documentId, String title, int chunkCount) {
         KnowledgeDocumentEntity entity = new KnowledgeDocumentEntity();
         entity.setId(documentId);
